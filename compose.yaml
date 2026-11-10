@@ -1,0 +1,70 @@
+name: video-platform
+
+x-app: &app
+  image: video-platform-app:local
+  build: .
+  environment:
+    DB_HOST: db
+    POSTGRES_DB: ${POSTGRES_DB:-video}
+    POSTGRES_USER: ${POSTGRES_USER:-video}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/start.sh to create .env}
+    MEDIA_ROOT: /data/media
+  volumes:
+    - media:/data/media
+
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-video}
+      POSTGRES_USER: ${POSTGRES_USER:-video}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/start.sh to create .env}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    image: nginx:1.28-alpine
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -Y, "off", -q, -O, /dev/null, "http://127.0.0.1/health/ready"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  media:

@@ -1,0 +1,13 @@
+# Optional managed-cloud CA for HTTPS during the image build; never stored in image layers.
+services:
+  app:
+    build:
+      secrets:
+        - proxy_ca
+  migrate:
+    build:
+      secrets:
+        - proxy_ca
+secrets:
+  proxy_ca:
+    file: ${BUILD_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}

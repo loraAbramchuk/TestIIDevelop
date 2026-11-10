@@ -1,0 +1,38 @@
+name: Checks
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: video
+          POSTGRES_USER: video
+          POSTGRES_PASSWORD: ci-only-isolated-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U video -d video"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      POSTGRES_DB: video
+      POSTGRES_USER: video
+      POSTGRES_PASSWORD: ci-only-isolated-password
+      RUN_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run --locked ruff check app migrations tests scripts
+      - run: uv run --locked ruff format --check app migrations tests scripts
+      - run: uv run --locked alembic upgrade head
+      - run: uv run --locked alembic check
+      - run: uv run --locked pytest
+      - name: Check Docker dependency export
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file requirements.txt
+          git diff --exit-code -- requirements.txt
