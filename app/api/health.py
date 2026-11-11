@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models import User
+from app.models import AuthRateLimit, AuthSession, User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health", tags=["health"])
@@ -42,6 +42,8 @@ def ready(request: Request, response: Response) -> ReadyStatus:
         with request.app.state.session_factory() as session:
             # Проверяет не только соединение, но и наличие прикладной схемы после миграций.
             session.execute(select(User.id).limit(1))
+            session.execute(select(AuthSession.token_hash).limit(1))
+            session.execute(select(AuthRateLimit.key).limit(1))
         checks["database"] = "ok"
     except SQLAlchemyError:
         logger.warning("Database readiness check failed")

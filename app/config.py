@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     postgres_user: str = "video"
     postgres_password: SecretStr = Field(min_length=16)
     media_root: Path = Path(".local/media")
+    auth_cookie_secure: bool = False
+    session_lifetime_hours: int = Field(default=336, ge=1, le=2160)
+
+    @property
+    def session_cookie_name(self) -> str:
+        return "__Host-video_session" if self.auth_cookie_secure else "video_session"
 
     @property
     def database_url(self) -> URL:

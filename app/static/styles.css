@@ -10,3 +10,16 @@ h1 { font-size: 1.8rem; }
 h2 { margin-bottom: .5rem; font-size: 1.3rem; }
 p { color: #5b6579; line-height: 1.6; }
 a:focus-visible { outline: 3px solid #5946da; outline-offset: 5px; }
+header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+nav { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+a { color: #4936c6; }
+.auth-card { max-width: 440px; margin: 2rem auto; background: white; padding: 2rem; border: 1px solid #e2e5ef; border-radius: 16px; }
+form { display: grid; gap: .65rem; }
+input { width: 100%; font: inherit; padding: .7rem; border: 1px solid #9ba4b7; border-radius: 6px; }
+input:focus-visible { outline: 2px solid #5946da; outline-offset: 2px; }
+button { font: inherit; cursor: pointer; border: 0; border-radius: 6px; padding: .65rem 1rem; color: white; background: #5946da; }
+button:disabled { opacity: .6; cursor: wait; }
+button:focus-visible { outline: 3px solid #172033; outline-offset: 3px; }
+.hint { font-size: .85rem; margin: 0; }
+.error { color: #a51b31; font-size: .95rem; }
+#session-error { text-align: center; }

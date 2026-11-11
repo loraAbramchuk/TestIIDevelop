@@ -9,6 +9,8 @@ x-app: &app
     POSTGRES_USER: ${POSTGRES_USER:-video}
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/start.sh to create .env}
     MEDIA_ROOT: /data/media
+    AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+    SESSION_LIFETIME_HOURS: ${SESSION_LIFETIME_HOURS:-336}
   volumes:
     - media:/data/media
 
@@ -38,6 +40,8 @@ services:
 
   app:
     <<: *app
+    # Only Nginx is externally reachable; it replaces incoming forwarded headers.
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
     depends_on:
       migrate:
         condition: service_completed_successfully

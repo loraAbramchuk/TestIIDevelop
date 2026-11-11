@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Регистрация' if register else 'Вход' }} — {{ app_name }}{% endblock %}
+{% block content %}
+  <section class="auth-card">
+    <h1>{{ 'Создать аккаунт' if register else 'Войти' }}</h1>
+    <form id="auth-form" data-action="{{ 'register' if register else 'login' }}">
+      {% if register %}
+        <label for="display_name">Имя</label>
+        <input id="display_name" name="display_name" autocomplete="nickname" required maxlength="100">
+      {% endif %}
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required maxlength="320">
+      <label for="password">Пароль</label>
+      <input id="password" name="password" type="password" required maxlength="128"
+             minlength="{{ 12 if register else 1 }}" autocomplete="{{ 'new-password' if register else 'current-password' }}"
+             {% if register %}aria-describedby="password-hint"{% endif %}>
+      {% if register %}<p id="password-hint" class="hint">От 12 до 128 символов.</p>{% endif %}
+      <p id="form-error" class="error" role="alert"></p>
+      <button type="submit">{{ 'Зарегистрироваться' if register else 'Войти' }}</button>
+    </form>
+    <p>{% if register %}Уже есть аккаунт? <a href="/login">Войти</a>
+       {% else %}Нет аккаунта? <a href="/register">Зарегистрироваться</a>{% endif %}</p>
+    <noscript>Для отправки формы включите JavaScript.</noscript>
+  </section>
+{% endblock %}
