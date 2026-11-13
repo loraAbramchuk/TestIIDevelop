@@ -14,6 +14,7 @@ from app.auth_dependencies import optional_user
 from app.config import Settings
 from app.db import make_engine, make_session_factory
 from app.models import User
+from app.storage_health import initialize_storage
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=PACKAGE_ROOT / "templates")
@@ -25,7 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        settings.media_root.mkdir(parents=True, exist_ok=True)
+        initialize_storage(settings.media_root)
         try:
             yield
         finally:

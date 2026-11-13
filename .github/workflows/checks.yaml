@@ -27,8 +27,9 @@ jobs:
           version: "0.13.5"
           python-version: "3.12"
       - run: uv sync --locked
-      - run: uv run --locked ruff check app migrations tests scripts
-      - run: uv run --locked ruff format --check app migrations tests scripts
+      - run: uv run --locked ruff check app migrations tests scripts experiments
+      - run: uv run --locked ruff format --check app migrations tests scripts experiments
+      - run: uv run --locked python scripts/export_video_contract.py --check
       - run: uv run --locked alembic upgrade head
       - run: uv run --locked alembic check
       - run: uv run --locked pytest
@@ -36,3 +37,30 @@ jobs:
         run: |
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file requirements.txt
           git diff --exit-code -- requirements.txt
+
+  queue-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      db:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: stage1_queue_probe
+          POSTGRES_USER: video
+          POSTGRES_PASSWORD: ci-only-isolated-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U video -d stage1_queue_probe"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      POSTGRES_DB: stage1_queue_probe
+      POSTGRES_USER: video
+      POSTGRES_PASSWORD: ci-only-isolated-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          python-version: "3.12"
+      - run: uv sync --locked --group experiments
+      - run: uv run --locked --group experiments python experiments/queue_probe.py

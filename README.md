@@ -10,6 +10,8 @@ Alembic управляет схемой базы, Jinja2 отображает п
 Требования: [спецификация](docs/requirements.md), [сценарии приёмки](docs/acceptance.md).
 Архитектура: [компоненты, модули, данные и жизненный цикл видео](docs/architecture.md).
 Разработка: [пошаговый план по модулям и критериям готовности](docs/development-plan.md).
+Этап 1: [контракт видео](docs/api/video-contract.md), [профиль и лимиты](docs/video-policy.md),
+[решение по очереди](docs/decisions/0001-postgresql-queue.md).
 
 ## Локальный запуск
 
@@ -60,8 +62,9 @@ BuildKit secret; проверка TLS остаётся включённой.
 ## Проверки
 
 ```bash
-uv run --locked ruff check app migrations tests scripts
-uv run --locked ruff format --check app migrations tests scripts
+uv run --locked ruff check app migrations tests scripts experiments
+uv run --locked ruff format --check app migrations tests scripts experiments
+uv run --locked python scripts/export_video_contract.py --check
 uv run --locked pytest -m 'not integration'
 # После запуска dev-БД и alembic upgrade head:
 RUN_DB_TESTS=1 uv run --locked pytest
@@ -72,10 +75,15 @@ uv run --locked alembic check
 Запускайте их на БД разработки или отдельной тестовой БД, не в production.
 Без `RUN_DB_TESTS=1` проверки PostgreSQL явно пропускаются.
 
-`/health/live` проверяет HTTP-процесс. `/health/ready` возвращает 200, только если
-доступна прикладная схема БД и удалось записать временный файл в хранилище;
-иначе — 503 без раскрытия сведений о подключении. Обработчик видео пока не
-существует, поэтому его готовность здесь не заявляется. Главная — пустое
+`/health/live` проверяет HTTP-процесс. `/health/ready` возвращает 200, если
+доступны прикладная схема БД и чтение служебного маркера в хранилище; иначе — 503.
+Маркер `.storage-readiness` создаётся один раз при инициализации. Готовность
+просмотра не зависит от записи в media и состояния будущего worker.
+`/health/diagnostics` дополнительно проверяет реальную запись временного файла
+и запас места, возвращая status=degraded при проблеме приёма файлов. HTTP 200
+у diagnostics означает получение диагностики; состояние нужно читать из JSON.
+Обработчик и загрузка видео пока обозначены как not_configured/not_implemented,
+поэтому эти ответы не заявляют готовность видеоподсистемы. Главная — пустое
 состояние, не проверка содержимого видеокаталога.
 
 ## Миграции и зависимости
@@ -95,6 +103,12 @@ runtime-экспорт с хешами для Docker. После изменен�
 uv lock
 uv export --frozen --no-dev --no-emit-project --format requirements-txt --output-file requirements.txt
 ```
+
+Procrastinate 3.11.0 пока установлен только в группе `experiments`, без
+production-миграций очереди. Примеры файлов, испытание очереди с SIGKILL и
+браузерная проверка описаны в [experiments/README.md](experiments/README.md).
+Поддержка stage-1 профиля в рабочей загрузке появится на последующих этапах;
+файл OpenAPI с контрактом не регистрирует маршруты.
 
 ## Авторизация
 
