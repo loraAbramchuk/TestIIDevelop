@@ -14,15 +14,14 @@ def settings(**overrides):
     return Settings(_env_file=None, postgres_password="test-password-not-production", **overrides)
 
 
-def test_planned_openapi_is_valid_and_not_exposed(client):
+def test_contract_openapi_marks_only_implemented_operations(client):
     document = json.loads(Path("docs/api/video.openapi.json").read_text())
     validate(document)
     actual_paths = client.get("/openapi.json").json()["paths"]
-    assert not set(document["paths"]) & set(actual_paths)
-    for path_item in document["paths"].values():
+    for path, path_item in document["paths"].items():
         for method, operation in path_item.items():
             if method in ("get", "post", "put", "patch", "delete", "head"):
-                assert operation["x-implemented"] is False
+                assert operation["x-implemented"] == (method in actual_paths.get(path, {}))
 
 
 def test_create_metadata_default_private_and_owner_cannot_be_supplied():

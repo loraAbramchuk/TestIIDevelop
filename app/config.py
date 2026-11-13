@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     max_video_long_side: int = Field(default=1920, ge=1)
     max_video_short_side: int = Field(default=1080, ge=1)
     max_video_fps: int = Field(default=60, ge=1, le=60)
+    video_create_limit_per_hour: int = Field(default=30, ge=1)
+    video_write_limit_per_minute: int = Field(default=120, ge=1)
 
     @model_validator(mode="after")
     def validate_video_limits(self):

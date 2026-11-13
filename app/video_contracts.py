@@ -1,4 +1,4 @@
-"""Stage 1 contracts only: these schemas do not register working video endpoints."""
+"""Video contracts. Metadata/ACL are implemented in stage 2; media routes remain planned."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -90,7 +90,7 @@ class VideoView(BaseModel):
     title: str
     description: str
     visibility: Visibility
-    duration_seconds: float = Field(gt=0)
+    duration_seconds: float = Field(gt=0, allow_inf_nan=False)
     width: int = Field(gt=0)
     height: int = Field(gt=0)
     stream_url: str
@@ -102,6 +102,11 @@ class UploadAccepted(BaseModel):
     id: UUID
     processing_status: Literal["processing"] = "processing"
     status_url: str
+
+
+class OwnedVideoList(BaseModel):
+    items: list[VideoOwnerStatus]
+    next_cursor: str | None = None
 
 
 class VideoGrant(BaseModel):

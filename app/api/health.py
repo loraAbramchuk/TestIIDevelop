@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models import AuthRateLimit, AuthSession, User
+from app.models import AuthRateLimit, AuthSession, User, Video, VideoGrant
 from app.storage_health import check_storage_read, check_storage_write
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,8 @@ def check_database(request: Request) -> None:
         session.execute(select(User.id).limit(1))
         session.execute(select(AuthSession.token_hash).limit(1))
         session.execute(select(AuthRateLimit.key).limit(1))
+        session.execute(select(Video.id).limit(1))
+        session.execute(select(VideoGrant.user_id).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:

@@ -1,4 +1,4 @@
-"""Generate the planned OpenAPI document without adding routes to the application."""
+"""Generate video contracts and mark implemented operations from the actual router."""
 
 import argparse
 import json
@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import video_contracts as models  # noqa: E402
+from app.videos.router import router as video_router  # noqa: E402
 
 OUTPUT = Path(__file__).resolve().parent.parent / "docs/api/video.openapi.json"
 
@@ -66,12 +67,18 @@ def build_contract():
         models.UploadAccepted,
         models.VideoGrant,
         models.GrantList,
+        models.OwnedVideoList,
         models.ContractError,
     ):
         schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(schema.pop("$defs", {}))
         schemas[model.__name__] = schema
     paths = {
+        "/api/studio/videos": {
+            "get": operation(
+                "Свои карточки, включая неготовые и скрытые; без удалённых", output="OwnedVideoList"
+            ),
+        },
         "/api/videos": {
             "post": operation(
                 "Создать метаданные; owner берётся из сессии",
@@ -139,7 +146,7 @@ def build_contract():
             "503": json_response("ContractError", "Очередь заполнена; Retry-After"),
         }
     )
-    paths["/api/videos/{video_id}/grants"]["get"]["parameters"] = [
+    pagination = [
         {"name": "cursor", "in": "query", "schema": {"type": "string"}},
         {
             "name": "limit",
@@ -147,6 +154,8 @@ def build_contract():
             "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
         },
     ]
+    paths["/api/videos/{video_id}/grants"]["get"]["parameters"] = pagination
+    paths["/api/studio/videos"]["get"]["parameters"] = pagination
     for suffix, mime in (("stream", "video/mp4"), ("thumbnail", "image/jpeg")):
         methods = {}
         for method in ("get", "head"):
@@ -177,7 +186,13 @@ def build_contract():
                 }
             methods[method] = op
         paths[f"/api/videos/{{video_id}}/{suffix}"] = methods
+    implemented = {
+        (route.path, method.lower()) for route in video_router.routes for method in route.methods
+    }
     for path, item in paths.items():
+        for method, op in item.items():
+            op["x-implemented"] = (path, method) in implemented
+            op["tags"] = ["videos" if op["x-implemented"] else "planned-video"]
         params = [
             {
                 "name": name,
@@ -193,11 +208,12 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Planned video API — NOT IMPLEMENTED",
-            "version": "0.1.0",
+            "title": "Video API contracts — stage 2 metadata/ACL, planned media",
+            "version": "0.2.0",
             "description": (
-                "Этап 1. Контракт будущих endpoints; действующий /docs содержит только "
-                "реализованные маршруты. Cookie Secure меняет имя на __Host-video_session."
+                "x-implemented отмечает реализованные операции; действующий /docs содержит "
+                "только рабочие маршруты. Передача файлов, stream/thumbnail и удаление "
+                "остаются проектными. Secure cookie называется __Host-video_session."
             ),
         },
         "paths": paths,

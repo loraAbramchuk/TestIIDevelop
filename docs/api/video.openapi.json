@@ -1,18 +1,113 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Planned video API — NOT IMPLEMENTED",
-    "version": "0.1.0",
-    "description": "Этап 1. Контракт будущих endpoints; действующий /docs содержит только реализованные маршруты. Cookie Secure меняет имя на __Host-video_session."
+    "title": "Video API contracts — stage 2 metadata/ACL, planned media",
+    "version": "0.2.0",
+    "description": "x-implemented отмечает реализованные операции; действующий /docs содержит только рабочие маршруты. Передача файлов, stream/thumbnail и удаление остаются проектными. Secure cookie называется __Host-video_session."
   },
   "paths": {
+    "/api/studio/videos": {
+      "get": {
+        "summary": "Свои карточки, включая неготовые и скрытые; без удалённых",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedVideoList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
     "/api/videos": {
       "post": {
         "summary": "Создать метаданные; owner берётся из сессии",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "201": {
             "description": "Успешный ответ",
@@ -109,9 +204,9 @@
       "get": {
         "summary": "Метаданные готового доступного видео",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Успешный ответ",
@@ -184,9 +279,9 @@
       "patch": {
         "summary": "Изменить свои метаданные; статус обработки изменить нельзя",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Успешный ответ",
@@ -371,9 +466,9 @@
       "get": {
         "summary": "Статус и причина ошибки/скрытия только владельцу",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Успешный ответ",
@@ -626,9 +721,9 @@
       "get": {
         "summary": "Разрешения только владельцу",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Успешный ответ",
@@ -732,9 +827,9 @@
       "put": {
         "summary": "Идемпотентно разрешить просмотр существующему пользователю",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Успешный ответ",
@@ -816,9 +911,9 @@
       "delete": {
         "summary": "Идемпотентно отозвать разрешение",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "204": {
             "description": "Без тела"
@@ -1550,6 +1645,34 @@
           "items"
         ],
         "title": "GrantList",
+        "type": "object"
+      },
+      "OwnedVideoList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VideoOwnerStatus"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OwnedVideoList",
         "type": "object"
       },
       "ContractError": {

@@ -23,3 +23,13 @@ button:focus-visible { outline: 3px solid #172033; outline-offset: 3px; }
 .hint { font-size: .85rem; margin: 0; }
 .error { color: #a51b31; font-size: .95rem; }
 #session-error { text-align: center; }
+textarea, select { font: inherit; width: 100%; padding: .7rem; border: 1px solid #9ba4b7; border-radius: 6px; }
+textarea:focus-visible, select:focus-visible { outline: 2px solid #5946da; outline-offset: 2px; }
+.panel { background: white; border: 1px solid #e2e5ef; border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0; max-width: 760px; }
+.video-row { display: flex; flex-direction: column; gap: .6rem; padding: 1rem; margin: .6rem 0; background: white; border: 1px solid #e2e5ef; border-radius: 8px; overflow-wrap: anywhere; }
+.video-row span { color: #5b6579; font-size: .9rem; }
+.grant-list { padding: 0; list-style: none; }
+.grant-list li { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.account-id, .grant-list code { overflow-wrap: anywhere; }
+.success { color: #11633b; }
+.error:empty, .success:empty { display: none; }

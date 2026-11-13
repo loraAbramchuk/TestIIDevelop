@@ -40,3 +40,7 @@ class AuthRateLimit(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     attempts: Mapped[int]
     resets_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+# Import domain models so Alembic and the application use the same complete metadata.
+from app.videos.models import Video, VideoGrant  # noqa: E402, F401

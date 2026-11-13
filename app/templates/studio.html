@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Мои видео — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/videos.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <h1>Мои видео</h1>
+  <p class="account-id">ID вашего аккаунта: <code>{{ user.id }}</code>.<br>Передайте его автору, чтобы он разрешил вам просмотр приватного видео.</p>
+  <section class="panel" aria-labelledby="create-title">
+    <h2 id="create-title">Создать карточку видео</h2>
+    <form id="video-create">
+      {% include "video_fields.html" %}
+      <p class="error" role="alert" data-error></p>
+      <button type="submit">Создать</button>
+    </form>
+  </section>
+  <section aria-labelledby="list-title">
+    <h2 id="list-title">Ваши карточки</h2>
+    {% for video in page['items'] %}
+      <article class="video-row">
+        <a href="/studio/videos/{{ video.id }}">{{ video.title }}</a>
+        <span>{{ 'Приватное' if video.visibility == 'private' else 'Публичное' }} · {{ {'uploading':'Ожидает загрузки', 'processing':'Обрабатывается', 'ready':'Готово', 'failed':'Ошибка обработки'}[video.processing_status] }}{% if video.moderation_status == 'hidden' %} · Скрыто модератором{% endif %}</span>
+      </article>
+    {% else %}<p>Карточек видео пока нет.</p>{% endfor %}
+    {% if page.next_cursor %}<a href="/studio?cursor={{ page.next_cursor|urlencode }}">Следующая страница</a>{% endif %}
+  </section>
+{% endblock %}

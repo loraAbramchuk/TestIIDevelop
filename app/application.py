@@ -1,12 +1,10 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -15,9 +13,10 @@ from app.config import Settings
 from app.db import make_engine, make_session_factory
 from app.models import User
 from app.storage_health import initialize_storage
-
-PACKAGE_ROOT = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=PACKAGE_ROOT / "templates")
+from app.templating import PACKAGE_ROOT, templates
+from app.videos.pages import router as video_pages
+from app.videos.router import router as video_router
+from app.videos.service import VideoError
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -47,6 +46,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = make_session_factory(engine)
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(video_router)
+    app.include_router(video_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
     original_openapi = app.openapi
@@ -60,6 +61,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.openapi = openapi
 
+    @app.exception_handler(VideoError)
+    async def video_error(request: Request, exc: VideoError):
+        return JSONResponse(
+            status_code=exc.status, content={"detail": exc.message, "code": exc.code}
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError):
         # Never echo passwords/other invalid input in validation errors.
@@ -70,7 +77,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def response_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        if request.url.path.startswith("/api/auth") or request.url.path in (
+        if request.url.path.startswith(("/api/videos", "/api/studio/videos", "/studio")):
+            response.headers["Cache-Control"] = "private, no-store"
+            response.headers.append("Vary", "Cookie")
+        elif request.url.path.startswith("/api/auth") or request.url.path in (
             "/",
             "/login",
             "/register",

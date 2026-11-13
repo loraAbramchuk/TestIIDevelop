@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/videos.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <p><a href="/studio">← Мои видео</a></p>
+  <h1>Управление видео</h1>
+  <p id="video-status">{{ {'uploading':'Файл ещё не загружен', 'processing':'Видео обрабатывается', 'ready':'Видео готово', 'failed':'Ошибка обработки'}[video.processing_status] }}</p>
+  {% if video.moderation_status == 'hidden' %}<p class="error">Скрыто модератором: {{ video.moderation_reason or 'Причина не указана' }}</p>{% endif %}
+  {% if video.error_code %}<p class="error">Не удалось обработать видео. Код ошибки: {{ video.error_code }}</p>{% endif %}
+  <section class="panel" aria-labelledby="metadata-title">
+    <h2 id="metadata-title">Данные видео</h2>
+    <form id="video-edit" data-video-id="{{ video.id }}">
+      {% include "video_fields.html" %}
+      <p class="error" role="alert" data-error></p>
+      <p class="success" role="status" data-success></p>
+      <button type="submit">Сохранить</button>
+    </form>
+  </section>
+  <section class="panel" aria-labelledby="grants-title">
+    <h2 id="grants-title">Доступ к приватному видео</h2>
+    <p>Укажите ID существующего пользователя. Разрешение будет действовать после готовности видео и не отменяет скрытие модератором.</p>
+    <form id="video-grant" data-video-id="{{ video.id }}">
+      <label for="user_id">ID пользователя</label>
+      <input id="user_id" name="user_id" required maxlength="36" autocomplete="off">
+      <p class="error" role="alert" data-error></p>
+      <button type="submit">Разрешить просмотр</button>
+    </form>
+    <ul class="grant-list">
+      {% for grant in grants.items %}
+        <li><code>{{ grant.user_id }}</code><button type="button" data-revoke="{{ grant.user_id }}" data-video-id="{{ video.id }}">Отозвать доступ</button></li>
+      {% else %}<li>Дополнительных разрешений нет.</li>{% endfor %}
+    </ul>
+    <p class="error" role="alert" id="grant-error"></p>
+    {% if grants.next_cursor %}<a href="/studio/videos/{{ video.id }}?cursor={{ grants.next_cursor|urlencode }}">Следующая страница разрешений</a>{% endif %}
+  </section>
+{% endblock %}

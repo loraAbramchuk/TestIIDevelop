@@ -1,0 +1,9 @@
+<label for="title">Название</label>
+<input id="title" name="title" required maxlength="200" value="{{ video.title if video else '' }}">
+<label for="description">Описание</label>
+<textarea id="description" name="description" maxlength="5000" rows="4">{{ video.description if video else '' }}</textarea>
+<label for="visibility">Видимость</label>
+<select id="visibility" name="visibility">
+  <option value="private" {% if not video or video.visibility == 'private' %}selected{% endif %}>Приватное — по разрешению</option>
+  <option value="public" {% if video and video.visibility == 'public' %}selected{% endif %}>Публичное — для всех</option>
+</select>
