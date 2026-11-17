@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -35,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
+        docs_url=None,
         description=(
             "API видеоплатформы. Авторизация: сначала GET /api/auth/csrf, затем "
             "передайте csrf_token в X-CSRF-Token при регистрации, входе и выходе. "
@@ -51,6 +53,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(upload_router)
     app.include_router(video_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
+
+    @app.get("/docs", include_in_schema=False)
+    def swagger_ui(request: Request):
+        assets = "/vendor/swagger-ui/5.35.0/"
+        return get_swagger_ui_html(
+            openapi_url=request.url_for("openapi").path,
+            title=f"{settings.app_name} — Swagger UI",
+            swagger_js_url=request.url_for("static", path=assets + "swagger-ui-bundle.js").path,
+            swagger_css_url=request.url_for("static", path=assets + "swagger-ui.css").path,
+            swagger_favicon_url=request.url_for("static", path=assets + "favicon-32x32.png").path,
+            swagger_ui_parameters={"validatorUrl": None},
+        )
 
     original_openapi = app.openapi
 

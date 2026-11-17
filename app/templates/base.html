@@ -15,7 +15,7 @@
         {% if user %}
           <a href="/upload">Загрузить</a>
           <a href="/studio">Мои видео</a>
-          <span>{{ user.display_name }}</span>
+          <span class="account-name">{{ user.display_name }}</span>
           <button type="button" id="logout">Выйти</button>
         {% else %}
           <a href="/login">Войти</a>

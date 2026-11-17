@@ -8,10 +8,14 @@ if (uploadForm) {
   const status = uploadForm.querySelector('#upload-status');
   const error = uploadForm.querySelector('[data-error]');
   const manage = uploadForm.querySelector('#upload-manage');
+  const fields = [...uploadForm.querySelectorAll('[name=title], [name=description], [name=visibility]')];
   let xhr = null;
   let busy = false;
   let accepted = false;
 
+  function updateControls() {
+    for (const field of [submit, fileInput, ...fields]) field.disabled = busy || accepted;
+  }
   function showCard() {
     manage.href = `/studio/videos/${uploadForm.dataset.videoId}`;
     manage.hidden = false;
@@ -32,8 +36,7 @@ if (uploadForm) {
       ready: 'Видео готово.',
     };
     status.textContent = messages[video.processing_status] || 'Обновите страницу, чтобы проверить статус.';
-    submit.disabled = busy || accepted;
-    fileInput.disabled = busy || accepted;
+    updateControls();
   }
   check.addEventListener('click', async () => {
     check.disabled = true;
@@ -52,11 +55,9 @@ if (uploadForm) {
       error.textContent = 'Файл превышает допустимый размер.'; return;
     }
     busy = true;
-    submit.disabled = fileInput.disabled = true;
     // Keep metadata stable while the request is active; retries update the same card.
-    const fields = [...uploadForm.querySelectorAll('[name=title], [name=description], [name=visibility]')];
     const metadata = Object.fromEntries(fields.map(field => [field.name, field.value]));
-    fields.forEach(field => { field.disabled = true; });
+    updateControls();
     try {
       status.textContent = 'Подготовка загрузки…';
       if (uploadForm.dataset.videoId) {
@@ -103,9 +104,8 @@ if (uploadForm) {
     } finally {
       xhr = null;
       busy = false;
-      submit.disabled = fileInput.disabled = accepted;
+      updateControls();
       cancel.hidden = true;
-      fields.forEach(field => { field.disabled = false; });
     }
   });
   window.addEventListener('beforeunload', event => {

@@ -11,7 +11,8 @@ h2 { margin-bottom: .5rem; font-size: 1.3rem; }
 p { color: #5b6579; line-height: 1.6; }
 a:focus-visible { outline: 3px solid #5946da; outline-offset: 5px; }
 header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+nav { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; min-width: 0; max-width: 100%; }
+.account-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 a { color: #4936c6; }
 .auth-card { max-width: 440px; margin: 2rem auto; background: white; padding: 2rem; border: 1px solid #e2e5ef; border-radius: 16px; }
 form { display: grid; gap: .65rem; }
