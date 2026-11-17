@@ -59,3 +59,41 @@ Firefox/Safari не объявляются проверенными. Откло�
 тестовой БД: создаёт два аккаунта, карточку и проверяет редактирование/grants.
 Передача файла и доступ к готовому ролику этим сценарием не проверяются.
 Команда и результаты: [проверки этапа 2](../docs/verification/stage-2.md).
+
+
+## Загрузка: этап 3
+
+Все три проверки выполняются только на отдельных тестовых данных. Для UI/HTTP
+нужен отдельный Compose-контур с лимитом 4 MiB (чтобы быстро проверить обе стороны
+границы). Пример с отдельными именованными volumes и портом:
+
+```bash
+# Образ сначала собирается штатным scripts/start.sh.
+# TEST_POSTGRES_PASSWORD задайте отдельно (не пароль рабочей БД).
+POSTGRES_PASSWORD="$TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage3_browser HTTP_PORT=8083 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=20971520 \
+MEDIA_CAPACITY_BYTES=67108864 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=65536 \
+docker compose -p stage3-verify -f compose.yaml up --no-build --detach --wait
+node experiments/upload_browser_probe.cjs /tmp/stage1-media/h264-aac.mp4
+uv run --locked python experiments/upload_transport_probe.py
+```
+
+UI-проверка использует Playwright/системный Chromium как выше. HTTP-проверка
+передаёт синтетические 2 MiB, обрывает TCP и проверяет ранний 413 Nginx; это
+проверка транспорта, не поддержки формата. Скрипты оставляют тестовые аккаунты,
+карточки и очередь в отдельном контуре. Не направляйте их в production.
+
+Для SIGKILL-пробы нужна мигрированная отдельная БД с именем, оканчивающимся
+на `_probe`, свободный localhost:8013 и отдельный пустой MEDIA_ROOT:
+
+```bash
+POSTGRES_DB=stage3_upload_probe uv run --locked alembic upgrade head
+POSTGRES_DB=stage3_upload_probe MEDIA_ROOT=/tmp/stage3-crash-media \
+uv run --locked python experiments/upload_crash_probe.py
+```
+
+Подключение к этой БД берётся из обычных DB_HOST/DB_PORT/POSTGRES_*; создать
+тестовую БД нужно заранее. Скрипт запускает собственный uvicorn, убивает именно
+его SIGKILL в середине потока, сдвигает истёкшую аренду в тестовой БД, запускает
+maintenance --once и проверяет сохранение ранее принятого исходника/задания
+после restart. БД и тестовые файлы остаются для осмотра.

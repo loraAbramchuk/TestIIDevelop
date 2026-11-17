@@ -13,6 +13,7 @@
       <a class="brand" href="/">{{ app_name }}</a>
       <nav aria-label="Аккаунт">
         {% if user %}
+          <a href="/upload">Загрузить</a>
           <a href="/studio">Мои видео</a>
           <span>{{ user.display_name }}</span>
           <button type="button" id="logout">Выйти</button>

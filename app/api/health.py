@@ -4,10 +4,18 @@ from typing import Literal
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models import AuthRateLimit, AuthSession, User, Video, VideoGrant
+from app.models import (
+    AuthRateLimit,
+    AuthSession,
+    UploadAdmission,
+    UploadAttempt,
+    User,
+    Video,
+    VideoGrant,
+)
 from app.storage_health import check_storage_read, check_storage_write
 
 logger = logging.getLogger(__name__)
@@ -26,7 +34,7 @@ class ReadyStatus(BaseModel):
 class Diagnostics(BaseModel):
     status: Literal["ok", "degraded", "unavailable"]
     checks: dict[str, Literal["ok", "error", "low", "not_configured"]]
-    video_uploads: Literal["not_implemented"] = "not_implemented"
+    video_uploads: Literal["available", "unavailable"]
 
 
 def check_database(request: Request) -> None:
@@ -36,6 +44,7 @@ def check_database(request: Request) -> None:
         session.execute(select(AuthRateLimit.key).limit(1))
         session.execute(select(Video.id).limit(1))
         session.execute(select(VideoGrant.user_id).limit(1))
+        session.execute(select(UploadAttempt.id).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:
@@ -84,12 +93,30 @@ def diagnostics(request: Request, response: Response) -> Diagnostics:
         )
     except OSError:
         checks["disk_reserve"] = "error"
+    try:
+        with request.app.state.session_factory() as session:
+            admission = session.get(UploadAdmission, 1)
+            session.execute(text("SELECT id FROM video_queue.procrastinate_jobs LIMIT 1"))
+            pending = session.scalar(
+                select(func.count())
+                .select_from(UploadAttempt)
+                .where(UploadAttempt.state.in_(("receiving", "processing")))
+            )
+            checks["upload_queue"] = (
+                "ok" if admission and pending < settings.max_pending_video_jobs else "low"
+            )
+    except SQLAlchemyError:
+        checks["upload_queue"] = "error"
     # No worker exists yet. A future processing adapter must report its actual heartbeat.
     checks["processing"] = "not_configured"
     status = "ok"
     if checks["database"] == "error" or checks["storage"] == "error":
         status = "unavailable"
-    elif checks["storage_write"] == "error" or checks["disk_reserve"] != "ok":
+    elif any(checks[key] != "ok" for key in ("storage_write", "disk_reserve", "upload_queue")):
         status = "degraded"
     response.headers["Cache-Control"] = "no-store"
-    return Diagnostics(status=status, checks=checks)
+    return Diagnostics(
+        status=status,
+        checks=checks,
+        video_uploads="available" if status == "ok" else "unavailable",
+    )

@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import video_contracts as models  # noqa: E402
+from app.uploads.router import router as upload_router  # noqa: E402
 from app.videos.router import router as video_router  # noqa: E402
 
 OUTPUT = Path(__file__).resolve().parent.parent / "docs/api/video.openapi.json"
@@ -187,7 +188,10 @@ def build_contract():
             methods[method] = op
         paths[f"/api/videos/{{video_id}}/{suffix}"] = methods
     implemented = {
-        (route.path, method.lower()) for route in video_router.routes for method in route.methods
+        (route.path, method.lower())
+        for router in (video_router, upload_router)
+        for route in router.routes
+        for method in route.methods
     }
     for path, item in paths.items():
         for method, op in item.items():
@@ -208,11 +212,11 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 2 metadata/ACL, planned media",
-            "version": "0.2.0",
+            "title": "Video API contracts — stage 3 metadata/ACL/upload, planned playback",
+            "version": "0.3.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
-                "только рабочие маршруты. Передача файлов, stream/thumbnail и удаление "
+                "только рабочие маршруты. Обработка, stream/thumbnail и удаление "
                 "остаются проектными. Secure cookie называется __Host-video_session."
             ),
         },

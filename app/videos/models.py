@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -61,6 +71,16 @@ class Video(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.clock_timestamp()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    current_upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "upload_attempts.id",
+            name="fk_videos_current_upload_id_upload_attempts",
+            use_alter=True,
+            ondelete="SET NULL",
+        )
+    )
+    source_key: Mapped[str | None] = mapped_column(String(160))
+    source_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class VideoGrant(Base):

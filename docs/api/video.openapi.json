@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Video API contracts — stage 2 metadata/ACL, planned media",
-    "version": "0.2.0",
-    "description": "x-implemented отмечает реализованные операции; действующий /docs содержит только рабочие маршруты. Передача файлов, stream/thumbnail и удаление остаются проектными. Secure cookie называется __Host-video_session."
+    "title": "Video API contracts — stage 3 metadata/ACL/upload, planned playback",
+    "version": "0.3.0",
+    "description": "x-implemented отмечает реализованные операции; действующий /docs содержит только рабочие маршруты. Обработка, stream/thumbnail и удаление остаются проектными. Secure cookie называется __Host-video_session."
   },
   "paths": {
     "/api/studio/videos": {
@@ -553,9 +553,9 @@
       "put": {
         "summary": "Передать файл; повтор после processing/ready — 409",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "202": {
             "description": "Успешный ответ",

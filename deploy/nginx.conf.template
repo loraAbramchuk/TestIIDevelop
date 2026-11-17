@@ -1,0 +1,38 @@
+# Docker changes app's IP on recreation; resolve it without restarting Nginx.
+resolver 127.0.0.11 valid=5s ipv6=off;
+resolver_timeout 2s;
+upstream video_api {
+    zone video_api 64k;
+    server app:8000 resolve;
+}
+
+server {
+    listen 80;
+    server_name _;
+    server_tokens off;
+    client_max_body_size 1m;
+    proxy_connect_timeout 3s;
+
+    location ~ "^/api/videos/[0-9a-fA-F-]{36}/content$" {
+        client_max_body_size ${MAX_UPLOAD_BYTES};
+        client_body_timeout ${UPLOAD_IDLE_TIMEOUT_SECONDS}s;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_read_timeout ${UPLOAD_TIMEOUT_SECONDS}s;
+        proxy_send_timeout ${UPLOAD_IDLE_TIMEOUT_SECONDS}s;
+        proxy_pass http://video_api;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://video_api;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # No public media directory. Authorized video delivery is a later step.
+}

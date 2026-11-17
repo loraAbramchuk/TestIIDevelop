@@ -1,12 +1,22 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/videos.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/videos.js') }}" defer></script><script src="{{ url_for('static', path='/upload.js') }}" defer></script>{% endblock %}
 {% block content %}
   <p><a href="/studio">← Мои видео</a></p>
   <h1>Управление видео</h1>
   <p id="video-status">{{ {'uploading':'Файл ещё не загружен', 'processing':'Видео обрабатывается', 'ready':'Видео готово', 'failed':'Ошибка обработки'}[video.processing_status] }}</p>
   {% if video.moderation_status == 'hidden' %}<p class="error">Скрыто модератором: {{ video.moderation_reason or 'Причина не указана' }}</p>{% endif %}
-  {% if video.error_code %}<p class="error">Не удалось обработать видео. Код ошибки: {{ video.error_code }}</p>{% endif %}
+  {% if video.error_code %}<p class="error">Загрузка или обработка завершилась ошибкой. Код: {{ video.error_code }}</p>{% endif %}
+  {% if video.processing_status in ('uploading', 'failed') %}
+  <section class="panel" aria-labelledby="upload-title">
+    <h2 id="upload-title">Загрузить файл</h2>
+    <form id="video-upload" data-video-id="{{ video.id }}" data-max-bytes="{{ max_upload_bytes }}">
+      {% include "upload_fields.html" %}
+    </form>
+  </section>
+  {% elif video.processing_status == 'processing' %}
+    <p>Файл принят и ожидает обработки. Воспроизведение станет доступно после подготовки видео.</p>
+  {% endif %}
   <section class="panel" aria-labelledby="metadata-title">
     <h2 id="metadata-title">Данные видео</h2>
     <form id="video-edit" data-video-id="{{ video.id }}">

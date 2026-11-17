@@ -14,6 +14,7 @@ from app.db import make_engine, make_session_factory
 from app.models import User
 from app.storage_health import initialize_storage
 from app.templating import PACKAGE_ROOT, templates
+from app.uploads.router import router as upload_router
 from app.videos.pages import router as video_pages
 from app.videos.router import router as video_router
 from app.videos.service import VideoError
@@ -47,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(video_router)
+    app.include_router(upload_router)
     app.include_router(video_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
@@ -64,7 +66,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(VideoError)
     async def video_error(request: Request, exc: VideoError):
         return JSONResponse(
-            status_code=exc.status, content={"detail": exc.message, "code": exc.code}
+            status_code=exc.status,
+            content={"detail": exc.message, "code": exc.code},
+            headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(RequestValidationError)
@@ -77,7 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def response_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        if request.url.path.startswith(("/api/videos", "/api/studio/videos", "/studio")):
+        if request.url.path.startswith(("/api/videos", "/api/studio/videos", "/studio", "/upload")):
             response.headers["Cache-Control"] = "private, no-store"
             response.headers.append("Vary", "Cookie")
         elif request.url.path.startswith("/api/auth") or request.url.path in (

@@ -17,7 +17,7 @@
     {% for video in page['items'] %}
       <article class="video-row">
         <a href="/studio/videos/{{ video.id }}">{{ video.title }}</a>
-        <span>{{ 'Приватное' if video.visibility == 'private' else 'Публичное' }} · {{ {'uploading':'Ожидает загрузки', 'processing':'Обрабатывается', 'ready':'Готово', 'failed':'Ошибка обработки'}[video.processing_status] }}{% if video.moderation_status == 'hidden' %} · Скрыто модератором{% endif %}</span>
+        <span>{{ 'Приватное' if video.visibility == 'private' else 'Публичное' }} · {{ {'uploading':'Ожидает загрузки', 'processing':'Обрабатывается', 'ready':'Готово', 'failed':'Ошибка загрузки или обработки'}[video.processing_status] }}{% if video.moderation_status == 'hidden' %} · Скрыто модератором{% endif %}</span>
       </article>
     {% else %}<p>Карточек видео пока нет.</p>{% endfor %}
     {% if page.next_cursor %}<a href="/studio?cursor={{ page.next_cursor|urlencode }}">Следующая страница</a>{% endif %}

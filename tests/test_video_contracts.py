@@ -73,6 +73,7 @@ def test_upload_reservation_and_invalid_limit_combinations():
         {"upload_lease_seconds": 20},
         {"upload_timeout_seconds": 10},
         {"media_capacity_bytes": 1024},
+        {"media_capacity_bytes": 2**63},
     ):
         with pytest.raises(ValidationError):
             settings(**overrides)

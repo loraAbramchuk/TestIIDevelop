@@ -1,4 +1,4 @@
-"""Video contracts. Metadata/ACL are implemented in stage 2; media routes remain planned."""
+"""Video contracts. Metadata/ACL/upload are implemented; processing and playback remain planned."""
 
 from datetime import datetime
 from enum import StrEnum

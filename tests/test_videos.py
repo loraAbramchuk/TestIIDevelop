@@ -253,6 +253,7 @@ def test_nonowner_cannot_manage_even_public_video(video_client, actors, seed_vid
         video_client.put(base + f"/grants/{actors[actor]['id']}", headers=headers).status_code
         == 404
     )
+    assert video_client.get(f"/api/videos/{video_id}/content").status_code == 405
     assert (
         video_client.delete(
             base + f"/grants/{actors['allowed']['id']}", headers=headers
@@ -476,7 +477,7 @@ def test_authentication_csrf_and_unimplemented_media(video_client, actors, seed_
         act(video_client, actors, "owner")
         for headers in ({}, {"X-CSRF-Token": "wrong"}):
             assert video_client.request(method, url, json=body, headers=headers).status_code == 403
-    for suffix in ("stream", "thumbnail", "content"):
+    for suffix in ("stream", "thumbnail"):
         response = video_client.get(f"/api/videos/{video_id}/{suffix}")
         assert response.status_code == 404
     assert (

@@ -49,5 +49,21 @@ def edit_page(
             "user": user,
             "video": video,
             "grants": grants,
+            "max_upload_bytes": request.app.state.settings.max_upload_bytes,
+        },
+    )
+
+
+@router.get("/upload", response_class=HTMLResponse)
+def upload_page(request: Request, user: PageUser):
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="upload.html",
+        context={
+            "app_name": request.app.state.settings.app_name,
+            "user": user,
+            "max_upload_bytes": request.app.state.settings.max_upload_bytes,
         },
     )

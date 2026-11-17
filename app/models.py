@@ -43,4 +43,5 @@ class AuthRateLimit(Base):
 
 
 # Import domain models so Alembic and the application use the same complete metadata.
+from app.uploads.models import UploadAdmission, UploadAttempt  # noqa: E402, F401
 from app.videos.models import Video, VideoGrant  # noqa: E402, F401

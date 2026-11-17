@@ -56,7 +56,7 @@ def test_readonly_storage_does_not_block_readiness(client, app, monkeypatch):
         assert response.json()["status"] == "degraded"
         assert response.json()["checks"]["storage_write"] == "error"
         assert response.json()["checks"]["processing"] == "not_configured"
-        assert response.json()["video_uploads"] == "not_implemented"
+        assert response.json()["video_uploads"] == "unavailable"
     finally:
         root.chmod(0o700)
 

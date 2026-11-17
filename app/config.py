@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     max_video_fps: int = Field(default=60, ge=1, le=60)
     video_create_limit_per_hour: int = Field(default=30, ge=1)
     video_write_limit_per_minute: int = Field(default=120, ge=1)
+    upload_limit_per_hour: int = Field(default=30, ge=1)
+    upload_cleanup_interval_seconds: int = Field(default=15, ge=1)
 
     @model_validator(mode="after")
     def validate_video_limits(self):
+        if max(self.media_capacity_bytes, self.upload_reservation_bytes()) > 2**63 - 1:
+            raise ValueError("Media limits must fit PostgreSQL bigint")
         if self.owner_media_quota_bytes < self.upload_reservation_bytes():
             raise ValueError("Owner quota must cover an upload and its processing reservation")
         if self.media_capacity_bytes < self.owner_media_quota_bytes:
