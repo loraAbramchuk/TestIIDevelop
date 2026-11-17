@@ -38,6 +38,7 @@ const fs = require('node:fs');
     assert.ok(videoId);
     assert.equal(created,1);
     assert.equal(await page.getByLabel('Описание',{exact:true}).inputValue(),'Описание сохраняется при повторе');
+    await page.getByRole('button',{name:'Отменить передачу',exact:true}).waitFor({state:'hidden'});
     assert.ok(await page.getByLabel('Название',{exact:true}).isEditable());
     await page.unroute('**/api/videos/*/content');
     const accepted = page.waitForResponse(r=>r.url().endsWith(`/api/videos/${videoId}/content`) && r.request().method()==='PUT');
@@ -79,18 +80,20 @@ const fs = require('node:fs');
     await page.getByLabel('Название',{exact:true}).fill('Потерянный ответ');
     await page.getByLabel('Видеофайл',{exact:true}).setInputFiles(filePath);
     await page.route('**/api/videos/*/content',async route=>{
-      const response=await route.fetch({postData:route.request().postDataBuffer()});
+      // Chromium's intercepted file upload may omit postData; replay the known binary fixture.
+      const response=await route.fetch({postData:fs.readFileSync(filePath)});
       assert.equal(response.status(),202,await response.text());
       await route.abort('failed');
     },{times:1});
     await page.getByRole('button',{name:'Загрузить',exact:true}).click();
     await page.getByText('Файл принят и сохранён. Ожидает обработки; воспроизведение пока недоступно.',{exact:true}).waitFor();
     await page.waitForFunction(()=>document.getElementById('upload-cancel').hidden);
+    const lostVideoId=await page.locator('#video-upload').getAttribute('data-video-id');
     for (const label of ['Название','Описание','Видимость','Видеофайл']) {
       assert.ok(await page.getByLabel(label,{exact:true}).isDisabled(),`${label} must be locked after status reconciliation`);
     }
     assert.deepEqual(errors,[]);
-    const report = {browser:browser.version(),result:'passed',video_id:videoId,source_bytes:fs.statSync(filePath).size,checks:['private default','oversize rejected before create','real API 415','retry metadata editable','retry same card','XHR 202','accepted metadata locked','transfer progress','separate processing status','no source path leaked','processing not viewable','edit in management persists','100-character name wraps at 320/390/768/1440px','lost response reconciles and locks form','no JS errors']};
+    const report = {browser:browser.version(),result:'passed',video_id:videoId,lost_response_video_id:lostVideoId,source_bytes:fs.statSync(filePath).size,checks:['private default','oversize rejected before create','real API 415','retry metadata editable','retry same card','XHR 202','accepted metadata locked','transfer progress','separate processing status','no source path leaked','processing not viewable','edit in management persists','100-character name wraps at 320/390/768/1440px','lost response reconciles and locks form','no JS errors']};
     fs.writeFileSync('/tmp/stage3-browser.json',JSON.stringify(report,null,2)+'\n');
     console.log(JSON.stringify(report));
   } finally {await browser.close();}
