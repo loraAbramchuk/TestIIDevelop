@@ -11,6 +11,8 @@ from app.models import (
     AuthRateLimit,
     AuthSession,
     Channel,
+    Comment,
+    Like,
     ProcessingRun,
     ProcessingWorker,
     Subscription,
@@ -54,6 +56,8 @@ def check_database(request: Request) -> None:
         session.execute(select(ProcessingWorker.id).limit(1))
         session.execute(select(Channel.id, Channel.owner_id).limit(1))
         session.execute(select(Subscription.channel_id).limit(1))
+        session.execute(select(Like.video_id).limit(1))
+        session.execute(select(Comment.id, Comment.text).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:

@@ -18,6 +18,8 @@ from app.channels.schemas import (
     ChannelView,
     SubscriptionState,
 )  # noqa: E402
+from app.interactions.router import router as interaction_router  # noqa: E402
+from app.interactions.schemas import CommentCreate, CommentPage, CommentView, LikeState  # noqa: E402
 from app.uploads.router import router as upload_router  # noqa: E402
 from app.videos.router import router as video_router  # noqa: E402
 
@@ -88,6 +90,10 @@ def build_contract():
         ChannelSummary,
         ChannelView,
         SubscriptionState,
+        LikeState,
+        CommentCreate,
+        CommentView,
+        CommentPage,
     ):
         schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(schema.pop("$defs", {}))
@@ -240,9 +246,38 @@ def build_contract():
     }
     paths["/api/subscriptions"] = {"get": operation("Свои подписки", output="ChannelList")}
     paths["/api/subscriptions"]["get"]["parameters"] = pagination
+    paths["/api/videos/{video_id}/likes"] = {
+        "get": operation("Лайки только доступного видео", output="LikeState", authenticated=False),
+        "put": operation("Идемпотентно поставить лайк", output="LikeState", mutation=True),
+        "delete": operation("Идемпотентно снять лайк", output="LikeState", mutation=True),
+    }
+    paths["/api/videos/{video_id}/comments"] = {
+        "get": operation(
+            "Комментарии доступного видео, новые сначала", output="CommentPage", authenticated=False
+        ),
+        "post": operation(
+            "Добавить текстовый комментарий",
+            output="CommentView",
+            body="CommentCreate",
+            mutation=True,
+            status=201,
+        ),
+    }
+    paths["/api/videos/{video_id}/comments"]["get"]["parameters"] = pagination
+    paths["/api/videos/{video_id}/comments/{comment_id}"] = {
+        "delete": operation(
+            "Удалить свой комментарий к доступному видео", mutation=True, status=204
+        )
+    }
     implemented = {
         (route.path, method.lower())
-        for router in (video_router, upload_router, catalog_router, channel_router)
+        for router in (
+            video_router,
+            upload_router,
+            catalog_router,
+            channel_router,
+            interaction_router,
+        )
         for route in router.routes
         for method in route.methods
     }
@@ -257,7 +292,7 @@ def build_contract():
                 "required": True,
                 "schema": {"type": "string", "format": "uuid"},
             }
-            for name in ("video_id", "user_id", "channel_id")
+            for name in ("video_id", "user_id", "channel_id", "comment_id")
             if "{" + name + "}" in path
         ]
         if params:
@@ -265,8 +300,8 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 6 catalog, channels and subscriptions",
-            "version": "0.6.0",
+            "title": "Video API contracts — stage 7 likes and comments",
+            "version": "0.7.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
                 "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "

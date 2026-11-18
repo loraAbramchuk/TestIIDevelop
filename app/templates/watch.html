@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script><script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/interactions.js') }}" defer></script>{% endblock %}
 {% block content %}
   <article class="watch">
     <video id="video-player" controls playsinline preload="metadata" poster="{{ video.thumbnail_url }}" aria-label="{{ video.title }}">
@@ -16,4 +16,26 @@
       <p><a href="/studio/videos/{{ video.id }}">Управление видео и доступом</a></p>
     {% endif %}
   </article>
+  <section id="interactions" class="watch" data-video-id="{{ video.id }}" aria-label="Лайки и комментарии">
+    <div class="interaction-actions">
+      <p>Лайков: <span id="like-count">—</span></p>
+      {% if user %}<button id="like-toggle" type="button" aria-pressed="false" disabled>Нравится</button>{% endif %}
+    </div>
+    <h2>Комментарии: <span id="comment-count">—</span></h2>
+    <p id="interaction-error" class="error" role="alert"></p>
+    <p id="interaction-success" class="success" role="status"></p>
+    <button id="interactions-refresh" type="button">Обновить обсуждение</button>
+    {% if user %}
+      <form id="comment-form" class="panel">
+        <label for="comment-text">Ваш комментарий</label>
+        <textarea id="comment-text" name="text" rows="3" required maxlength="2000" aria-describedby="comment-hint"></textarea>
+        <p id="comment-hint" class="hint">До 2000 символов. Только текст.</p>
+        <button type="submit" disabled>Отправить комментарий</button>
+      </form>
+    {% else %}<p><a href="/login?next=/watch/{{ video.id }}">Войдите, чтобы поставить лайк или написать комментарий</a></p>{% endif %}
+    <p id="comments-empty" hidden>Комментариев пока нет.</p>
+    <div id="comment-list" aria-live="polite"></div>
+    <button id="comments-more" type="button" hidden>Ещё комментарии</button>
+    <noscript>Для просмотра лайков и комментариев включите JavaScript.</noscript>
+  </section>
 {% endblock %}

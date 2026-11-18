@@ -1,5 +1,6 @@
-"""Verify 0006 -> 0007 -> 0006 -> 0007 only in an empty *_probe database."""
+"""Verify a catalog/interactions upgrade and downgrade only in an empty *_probe DB."""
 
+import argparse
 import hashlib
 import json
 import secrets
@@ -18,8 +19,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.application import create_app  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.db import make_engine, make_session_factory  # noqa: E402
-from app.models import AuthSession, Channel, ProcessingRun, UploadAttempt, User, Video, VideoGrant  # noqa: E402
-from app.security import token_hash  # noqa: E402
+from app.models import (
+    AuthSession,
+    Channel,
+    ProcessingRun,
+    Subscription,
+    UploadAttempt,
+    User,
+    Video,
+    VideoGrant,
+)  # noqa: E402
+from app.security import csrf_token, token_hash  # noqa: E402
 from app.uploads.queue import enqueue_processing  # noqa: E402
 
 
@@ -30,13 +40,17 @@ def migrate(*arguments):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--baseline", choices=("0006", "0007"), default="0006")
+    baseline = parser.parse_args().baseline
+    stage = "7" if baseline == "0007" else "6"
     settings = Settings()
     assert settings.postgres_db.endswith("_probe"), "Use a dedicated empty *_probe database"
     engine = make_engine(settings)
     assert not inspect(engine).has_table("users"), "Database must be empty"
-    migrate("upgrade", "0006")
+    migrate("upgrade", baseline)
     factory = make_session_factory(engine)
-    root = Path(tempfile.mkdtemp(prefix="stage6-migration-"))
+    root = Path(tempfile.mkdtemp(prefix=f"stage{stage}-migration-"))
     settings = settings.model_copy(update={"media_root": root})
     source = Path("/tmp/stage1-media/h264-aac.mp4").read_bytes()
     upload_id, run_id = uuid4(), uuid4()
@@ -85,6 +99,13 @@ def main():
         db.add_all([owner, recipient])
         db.flush()
         owner_id, recipient_id = owner.id, recipient.id
+        if baseline == "0007":
+            channel = Channel(
+                owner_id=owner_id, name=owner.display_name, description="Старый профиль"
+            )
+            db.add_all([channel, Channel(owner_id=recipient_id, name=recipient.display_name)])
+            db.flush()
+            db.add(Subscription(subscriber_id=recipient_id, channel_id=channel.id))
         video = Video(
             owner_id=owner_id,
             title="Прежнее готовое видео",
@@ -138,7 +159,7 @@ def main():
         with factory() as db:
             video = db.get(Video, video_id)
             upload = db.get(UploadAttempt, upload_id)
-            return {
+            result = {
                 "users": [
                     (str(u.id), u.email, u.display_name, u.password_hash, u.role)
                     for u in db.scalars(select(User).order_by(User.id))
@@ -179,6 +200,16 @@ def main():
                     for key in (source_key, playback_key, thumbnail_key)
                 ],
             }
+            if baseline == "0007":
+                result["channels"] = [
+                    (str(c.id), str(c.owner_id), c.name, c.description)
+                    for c in db.scalars(select(Channel).order_by(Channel.id))
+                ]
+                result["subscriptions"] = [
+                    (str(s.subscriber_id), str(s.channel_id), s.created_at)
+                    for s in db.scalars(select(Subscription))
+                ]
+            return result
 
     before = snapshot()
     migrate("upgrade", "head")
@@ -211,8 +242,23 @@ def main():
             == 200
         )
         assert client.get(f"/api/videos/{video_id}/stream").status_code == 404
+        if baseline == "0007":
+            likes_url = f"/api/videos/{video_id}/likes"
+            comments_url = f"/api/videos/{video_id}/comments"
+            assert client.get(likes_url, headers=recipient_headers).json()["like_count"] == 0
+            assert client.get(comments_url, headers=recipient_headers).json()["total_count"] == 0
+            writer = recipient_headers | {"X-CSRF-Token": csrf_token(tokens[1])}
+            assert client.put(likes_url, headers=writer).json()["like_count"] == 1
+            assert (
+                client.post(
+                    comments_url, headers=writer, json={"text": "После миграции"}
+                ).status_code
+                == 201
+            )
+            assert client.get(likes_url).status_code == 404
+            assert client.get(comments_url).status_code == 404
     migrate("check")
-    migrate("downgrade", "0006")
+    migrate("downgrade", baseline)
     assert snapshot() == before
     migrate("upgrade", "head")
     assert snapshot() == before
@@ -224,11 +270,22 @@ def main():
             "users/roles/sessions/video/grant/queue/files preserved",
             "legacy session sees channel and permitted video",
             "anonymous discovery does not expose legacy private video",
-            "downgrade/re-upgrade preserves stage 5 data",
+            f"downgrade/re-upgrade preserves baseline {baseline} data",
             "alembic check clean",
         ],
     }
-    Path("/tmp/stage6-migration.json").write_text(json.dumps(report, indent=2) + "\n")
+    if baseline == "0007":
+        with TestClient(create_app(settings)) as client:
+            assert client.get(likes_url, headers=recipient_headers).json()["like_count"] == 0
+            assert client.get(comments_url, headers=recipient_headers).json()["total_count"] == 0
+        report["checks"].extend(
+            [
+                "channel profiles, IDs and subscriptions preserved",
+                "legacy session uses new interactions with private ACL",
+                "downgrade removes only new interaction data",
+            ]
+        )
+    Path(f"/tmp/stage{stage}-migration.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report))
     engine.dispose()
 

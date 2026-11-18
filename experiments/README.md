@@ -281,3 +281,52 @@ POSTGRES_DB=stage6_catalog_probe uv run --locked python experiments/catalog_migr
 повторный upgrade, запросы со старой сессией, downgrade/re-upgrade и alembic check.
 Результат JSON печатается в stdout; временные файлы и БД остаются для осмотра.
 Downgrade проверяется только в эксперименте: он удаляет профили каналов и подписки.
+
+## Лайки и комментарии: этап 7
+
+Нужен свежий изолированный проект `stage7-verify` на localhost:8092,
+БД stage7_verify и актуальные app/web. Playwright/Chromium, Node.js, FFmpeg и
+Docker CLI устанавливаются как в предыдущих разделах. Пароль отдельной тестовой
+БД задайте в STAGE7_TEST_POSTGRES_PASSWORD, рабочую БД не используйте.
+
+```bash
+docker compose build app web
+POSTGRES_PASSWORD="$STAGE7_TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage7_verify HTTP_PORT=8092 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=67108864 \
+MEDIA_CAPACITY_BYTES=536870912 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=262144 \
+UPLOAD_CLEANUP_INTERVAL_SECONDS=2 PROCESSING_LEASE_SECONDS=6 \
+PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 \
+docker compose -p stage7-verify -f compose.yaml up --no-build --detach --wait
+
+INTERACTIONS_TEST_PROJECT=stage7-verify node experiments/interactions_browser_probe.cjs
+PLAYBACK_TEST_BASE_URL=http://127.0.0.1:8092 node experiments/playback_browser_probe.cjs
+DOCS_TEST_BASE_URL=http://127.0.0.1:8092 node experiments/docs_browser_probe.cjs
+```
+
+Interactions создаёт два аккаунта, загружает настоящий H.264/AAC до ready и
+проверяет плеер, гостевые счётчики, лайк/отмену, комментарии, XSS как текст,
+чужое удаление и исчезновение комментария в другой вкладке. Проверяются
+сохранение черновика, ошибки 503/429, потерянный ответ после настоящего POST,
+повтор загрузки страницы комментариев и отсутствие дублей, private/grant/revoke
+с очисткой обсуждения после отказа. Для пагинации тест создаёт 22 комментария
+через SQL только в stage7-verify-db-1, включая строку длиной 2000 символов.
+Вёрстка проверяется на 320/390/768/1440 px. Совместно с playback создаются четыре
+аккаунта; для повторов учитывайте лимит регистрации 5/IP/час.
+
+Артефакты: /tmp/stage7-interactions.json, /tmp/stage7-watch-{desktop,mobile}.png.
+Playback и docs используют прежние имена артефактов, описанные выше.
+
+Миграционная проверка использует тот же инструмент с baseline 0007.
+Создайте отдельную **пустую** БД с суффиксом `_probe`:
+
+```bash
+docker compose exec -T db createdb -U video stage7_interactions_probe
+POSTGRES_DB=stage7_interactions_probe uv run --locked python experiments/catalog_migration_probe.py --baseline 0007
+```
+
+Скрипт проверяет upgrade до head, повторный upgrade, downgrade до 0007 и upgrade
+снова. Сравниваются пользователи/роли/сессии, профили и UUID каналов, подписки,
+видео, grants, очередь/загрузки и хеши настоящих файлов. Старая сессия получает
+доступ к новым лайкам/комментариям только при наличии разрешения на видео.
+Отчёт: /tmp/stage7-migration.json. Downgrade удаляет взаимодействия — это
+проверка сохранения прежних данных, не безопасный откат без резервной копии.

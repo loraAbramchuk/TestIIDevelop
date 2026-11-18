@@ -56,3 +56,8 @@ button.danger { background: #a51b31; }
 .card-body h2 { margin: 0 0 .6rem; font-size: 1.1rem; }
 .card-body p { margin-bottom: 0; }
 #channel-profile { overflow-wrap: anywhere; }
+.interaction-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.comment-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+.comment-meta time { font-size: .85rem; color: #5b6579; }
+#comments-more { margin-top: 1rem; }

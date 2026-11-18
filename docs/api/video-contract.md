@@ -1,11 +1,12 @@
-# Контракт видео: этапы 1–6
+# Контракт видео: этапы 1–7
 
 Статус: реализованы метаданные, grants, передача исходника, обработка,
-защищённая раздача, удаление, каталог, каналы и подписки. Схемы находятся в
-`app/video_contracts.py`, `app/catalog/schemas.py`, `app/channels/schemas.py`;
+защищённая раздача, удаление, каталог, каналы, подписки, лайки и комментарии. Схемы находятся в
+`app/video_contracts.py`, `app/catalog/schemas.py`, `app/channels/schemas.py`,
+`app/interactions/schemas.py`;
 машиночитаемый контракт — [video.openapi.json](video.openapi.json).
 Поле x-implemented в JSON вычисляется по действующему router. `/docs` описывает
-только реализованные операции авторизации, health, videos, catalog и channels.
+только реализованные операции авторизации, health, videos, catalog, channels и interactions.
 
 ## Общие правила
 
@@ -98,6 +99,50 @@ PATCH принимает name (1–100 символов после trim) и desc
 Ответы каталога/каналов и HTML используют no-store и Vary: Cookie.
 Недоступность БД — 503 service_unavailable с безопасным сообщением; HTML
 получает страницу ошибки. Некорректные параметры HTML-каталога — страница 422.
+
+## Лайки и комментарии
+
+| Метод | Endpoint | Ответ |
+| --- | --- | --- |
+| GET | `/api/videos/{video_id}/likes` | 200 LikeState |
+| PUT | `/api/videos/{video_id}/likes` | 200 LikeState; идемпотентный лайк |
+| DELETE | `/api/videos/{video_id}/likes` | 200 LikeState; идемпотентная отмена |
+| GET | `/api/videos/{video_id}/comments` | 200 CommentPage |
+| POST | `/api/videos/{video_id}/comments` | 201 CommentView |
+| DELETE | `/api/videos/{video_id}/comments/{comment_id}` | 204; удалить свой комментарий |
+
+Все операции, включая счётчики, требуют ready + visible + отсутствия удаления +
+public/владелец/grant. Роли и подписки не обходят эту проверку. GET доступен гостю
+для публичного видео; запись требует сессии и CSRF. Недоступное видео — одинаковый
+404 video_not_found до чтения взаимодействий. Изменения сериализуются строкой
+видео, затем повторно проверяют актуальную ACL после ожидания блокировки.
+
+LikeState: video_id, like_count, is_liked. Для гостя is_liked=false. Уникальная
+пара video_id/user_id исключает дубли, повтор PUT/DELETE возвращает текущее
+состояние с JSON-телом, включая отмену отсутствующего лайка.
+
+POST принимает только `{"text":"Комментарий"}`: 1–2000 символов после trim.
+Пустой текст, null, NUL, непарный суррогат, неверный тип и лишние поля — 422.
+Вложения, HTML-разметка и ответы на комментарии не поддерживаются; HTML-подобный
+текст допустим и отображается буквально. POST создаёт отдельную запись при
+каждом успешном вызове; автоматически повторять запрос после потери ответа нельзя.
+
+CommentView: id, video_id, text, created_at, author (ChannelSummary), can_delete.
+Автор представлен публичным каналом, без email. can_delete=true только у автора
+комментария. Владелец видео, moderator и admin не могут удалять чужие комментарии.
+Чужой, отсутствующий или относящийся к другому видео комментарий —
+404 comment_not_found; после потери доступа даже свой комментарий — 404 video_not_found.
+
+CommentPage: items, next_cursor, total_count. Порядок created_at/id по убыванию,
+limit 1–100 (20 по умолчанию), cursor до 1024 символов. Курсор привязан к видео и
+посетителю; неверный контекст — 400 invalid_cursor. ACL заново проверяется до
+разбора курсора и подсчёта строк на каждой странице. total_count — число
+комментариев этого видео, не количество текущей страницы.
+
+Изменения имеют общий лимит INTERACTION_WRITE_LIMIT_PER_MINUTE (120) на
+пользователя; POST дополнительно COMMENT_CREATE_LIMIT_PER_MINUTE (10).
+Лимиты хранятся в PostgreSQL, не зависят от HTTP-процесса; 429 с Retry-After.
+Ответы используют private, no-store и Vary: Cookie, включая ошибки.
 
 ## Передача файла
 

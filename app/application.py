@@ -18,6 +18,7 @@ from app.channels.router import router as channel_router
 from app.config import Settings
 from app.db import make_engine, make_session_factory
 from app.errors import DomainError
+from app.interactions.router import router as interaction_router
 from app.models import User
 from app.navigation import local_return_path
 from app.storage_health import initialize_storage
@@ -61,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(video_pages)
     app.include_router(catalog_router)
     app.include_router(channel_router)
+    app.include_router(interaction_router)
     app.include_router(catalog_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
