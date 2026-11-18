@@ -1,4 +1,4 @@
-"""Video contracts. Metadata/ACL/upload are implemented; processing and playback remain planned."""
+"""Video contracts. Metadata/ACL/upload/processing are implemented; playback remains planned."""
 
 from datetime import datetime
 from enum import StrEnum

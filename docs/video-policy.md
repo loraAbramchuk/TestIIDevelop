@@ -1,8 +1,8 @@
-# Профиль видео и ограничения этапов 1–3
+# Профиль видео и ограничения этапов 1–4
 
 Настройки валидируются в Settings и передаются Compose. Загрузка, квоты, слоты,
-граница очереди и таймауты реализованы на этапе 3. Профиль кодеков и бюджеты
-обработки остаются контрактом до подключения FFmpeg-worker на этапе 4.
+граница очереди и таймауты реализованы на этапе 3. Worker этапа 4 проверяет профиль
+кодеков, подготавливает файлы и обеспечивает бюджеты обработки.
 
 ## Поддерживаемый профиль
 
@@ -52,6 +52,13 @@ HLS, несколько качеств и возобновляемые загр�
 | UPLOAD_LIMIT_PER_HOUR | 30 | Попытки передачи на аккаунт, включая неудачные |
 | UPLOAD_CLEANUP_INTERVAL_SECONDS | 15 | Интервал очистки истёкших/неудачных попыток |
 | PROCESSING_CONCURRENCY | 1 | Параллелизм обработки до измерений |
+| PROCESSING_LEASE_SECONDS | 60 | Аренда поколения, TTL heartbeat и recovery |
+| PROCESSING_HEARTBEAT_SECONDS | 5 | Продление аренды и heartbeat процесса |
+| PROCESSING_MAX_ATTEMPTS | 3 | Фактические media-запуски; отдельный ограниченный recovery-бюджет |
+| PROCESSING_RETRY_SECONDS | 15 | Задержка временного повтора |
+| PROCESSING_MEMORY_BYTES | 805306368 | RLIMIT_AS одного media-процесса |
+| PROCESSING_CONTAINER_MEMORY | 2g | Общая память контейнера worker |
+| PROCESSING_CPUS | 1.0 | CPU контейнера worker |
 | FFPROBE_TIMEOUT_SECONDS | 30 | Ограничение анализа файла |
 | PROCESSING_TIMEOUT_SECONDS | 900 | Ограничение одной обработки |
 | MAX_VIDEO_DURATION_SECONDS | 7200 | Длительность до 2 часов |

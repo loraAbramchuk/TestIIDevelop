@@ -81,6 +81,10 @@ class Video(Base):
     )
     source_key: Mapped[str | None] = mapped_column(String(160))
     source_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    playback_key: Mapped[str | None] = mapped_column(String(160))
+    thumbnail_key: Mapped[str | None] = mapped_column(String(160))
+    playback_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    thumbnail_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class VideoGrant(Base):

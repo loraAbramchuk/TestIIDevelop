@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     settings = Settings()
-    engine = make_engine(settings)
+    engine = make_engine(settings, query_timeout=True)
     service = UploadService(settings, make_session_factory(engine))
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -25,6 +25,12 @@ def main():
     try:
         while not stop.is_set():
             try:
+                from app.processing.service import ProcessingService
+
+                processing = ProcessingService(settings, service.sessions)
+                recovered = processing.recover()
+                if recovered:
+                    logging.warning("Recovered %s interrupted video jobs", recovered)
                 count = service.sweep()
                 if count:
                     logging.warning("Cleaned %s expired/failed upload attempts", count)

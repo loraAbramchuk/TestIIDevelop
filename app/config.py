@@ -29,7 +29,12 @@ class Settings(BaseSettings):
     upload_timeout_seconds: int = Field(default=3600, ge=1)
     upload_lease_seconds: int = Field(default=120, ge=1)
     upload_heartbeat_seconds: int = Field(default=15, ge=1)
-    processing_concurrency: int = Field(default=1, ge=1)
+    processing_concurrency: int = Field(default=1, ge=1, le=4)
+    processing_lease_seconds: int = Field(default=60, ge=3)
+    processing_heartbeat_seconds: int = Field(default=5, ge=1)
+    processing_max_attempts: int = Field(default=3, ge=1, le=10)
+    processing_retry_seconds: int = Field(default=15, ge=1)
+    processing_memory_bytes: int = Field(default=768 * 1024**2, ge=128 * 1024**2)
     ffprobe_timeout_seconds: int = Field(default=30, ge=1)
     processing_timeout_seconds: int = Field(default=900, ge=1)
     max_video_duration_seconds: int = Field(default=7200, ge=1)
@@ -55,6 +60,8 @@ class Settings(BaseSettings):
             raise ValueError("Upload lease must exceed two heartbeat intervals")
         if self.upload_timeout_seconds < self.upload_idle_timeout_seconds:
             raise ValueError("Upload total timeout must cover idle timeout")
+        if self.processing_lease_seconds <= 2 * self.processing_heartbeat_seconds:
+            raise ValueError("Processing lease must exceed two heartbeat intervals")
         if self.max_video_long_side < self.max_video_short_side:
             raise ValueError("Video long side must be at least the short side")
         return self
