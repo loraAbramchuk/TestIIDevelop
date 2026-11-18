@@ -20,6 +20,19 @@ from app.channels.schemas import (
 )  # noqa: E402
 from app.interactions.router import router as interaction_router  # noqa: E402
 from app.interactions.schemas import CommentCreate, CommentPage, CommentView, LikeState  # noqa: E402
+from app.moderation.router import router as moderation_router  # noqa: E402
+from app.moderation.schemas import (
+    AuditPage,
+    AuditView,
+    ModerationVideo,
+    ReportCreate,
+    ReportDecision,
+    ReportPage,
+    ReportReceipt,
+    StaffReport,
+    VideoModeration,
+    VideoModerationResult,
+)  # noqa: E402
 from app.playlists.router import router as playlist_router  # noqa: E402
 from app.playlists.schemas import (
     PlaylistList,
@@ -107,6 +120,16 @@ def build_contract():
         PlaylistView,
         PlaylistList,
         PlaylistVideos,
+        ReportCreate,
+        ReportReceipt,
+        StaffReport,
+        ReportDecision,
+        ReportPage,
+        ModerationVideo,
+        VideoModeration,
+        VideoModerationResult,
+        AuditView,
+        AuditPage,
     ):
         schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(schema.pop("$defs", {}))
@@ -340,6 +363,63 @@ def build_contract():
         )
     }
     paths["/api/channels/{channel_id}/playlists"]["get"]["parameters"] = pagination
+    paths["/api/videos/{video_id}/reports"] = {
+        "post": operation(
+            "Подать жалобу только на доступное видео",
+            output="ReportReceipt",
+            body="ReportCreate",
+            mutation=True,
+            status=201,
+        )
+    }
+    paths["/api/videos/{video_id}/reports"]["post"]["responses"]["200"] = json_response(
+        "ReportReceipt", "Открытая жалоба уже существует; повтор без дубликата"
+    )
+    paths["/api/moderation/reports"] = {
+        "get": operation("Очередь жалоб только для moderator/admin", output="ReportPage")
+    }
+    paths["/api/moderation/reports"]["get"]["parameters"] = pagination + [
+        {
+            "name": "status",
+            "in": "query",
+            "schema": {
+                "type": "string",
+                "enum": ["open", "resolved", "dismissed", "all"],
+                "default": "open",
+            },
+        }
+    ]
+    paths["/api/moderation/reports/{report_id}"] = {
+        "get": operation("Жалоба без расширения прав просмотра", output="StaffReport")
+    }
+    paths["/api/moderation/reports/{report_id}/decision"] = {
+        "post": operation(
+            "Закрыть/отклонить жалобу с причиной и аудитом",
+            output="StaffReport",
+            body="ReportDecision",
+            mutation=True,
+        )
+    }
+    paths["/api/moderation/videos/{video_id}"] = {
+        "get": operation(
+            "Минимальные сведения об объекте модерации; контент только по ACL",
+            output="ModerationVideo",
+        )
+    }
+    paths["/api/moderation/videos/{video_id}/visibility"] = {
+        "post": operation(
+            "Скрыть/восстановить, не меняя приватность, с атомарным аудитом",
+            output="VideoModerationResult",
+            body="VideoModeration",
+            mutation=True,
+        )
+    }
+    paths["/api/moderation/audit"] = {
+        "get": operation("Журнал действий только для moderator/admin", output="AuditPage")
+    }
+    paths["/api/moderation/audit"]["get"]["parameters"] = pagination + [
+        {"name": "video_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}
+    ]
     implemented = {
         (route.path, method.lower())
         for router in (
@@ -349,6 +429,7 @@ def build_contract():
             channel_router,
             interaction_router,
             playlist_router,
+            moderation_router,
         )
         for route in router.routes
         for method in route.methods
@@ -364,7 +445,14 @@ def build_contract():
                 "required": True,
                 "schema": {"type": "string", "format": "uuid"},
             }
-            for name in ("video_id", "user_id", "channel_id", "comment_id", "playlist_id")
+            for name in (
+                "video_id",
+                "user_id",
+                "channel_id",
+                "comment_id",
+                "playlist_id",
+                "report_id",
+            )
             if "{" + name + "}" in path
         ]
         if params:
@@ -372,8 +460,8 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 8 public playlists",
-            "version": "0.8.1",
+            "title": "Video API contracts — stage 9 reports, moderation and audit",
+            "version": "0.9.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
                 "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "

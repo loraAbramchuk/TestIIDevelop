@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Модерация видео — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/moderation.js') }}" defer></script>{% endblock %}
+{% block content %}
+<p><a href="/moderation">К очереди жалоб</a> · <a href="/moderation/audit?video_id={{ video.id }}">История действий с видео</a></p>
+<h1>Модерация видео</h1>{% include "moderation_video_summary.html" %}
+<form id="video-moderation-form" class="panel" data-video-id="{{ video.id }}" data-state="{{ video.moderation_status }}" data-deleted="{{ 'true' if video.deleted else 'false' }}">
+<label for="moderation-reason">Причина действия</label><textarea id="moderation-reason" name="reason" required maxlength="2000" rows="4"></textarea>
+<div class="interaction-actions"><button type="submit" name="status" value="hidden" {% if video.deleted or video.moderation_status == 'hidden' %}disabled{% endif %}>Скрыть видео</button><button type="submit" name="status" value="visible" {% if video.deleted or video.moderation_status == 'visible' %}disabled{% endif %}>Восстановить видео</button></div>
+</form><p><button id="moderation-refresh" type="button" class="secondary">Обновить сведения</button></p><p id="moderation-refresh-status" role="status"></p><p id="moderation-error" class="error" role="alert"></p><p id="moderation-success" class="success" role="status"></p>
+{% endblock %}

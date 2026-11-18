@@ -8,6 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models import (
+    AuditEvent,
     AuthRateLimit,
     AuthSession,
     Channel,
@@ -17,6 +18,7 @@ from app.models import (
     PlaylistItem,
     ProcessingRun,
     ProcessingWorker,
+    Report,
     Subscription,
     UploadAdmission,
     UploadAttempt,
@@ -62,6 +64,8 @@ def check_database(request: Request) -> None:
         session.execute(select(Comment.id, Comment.text).limit(1))
         session.execute(select(Playlist.id, Playlist.revision).limit(1))
         session.execute(select(PlaylistItem.playlist_id, PlaylistItem.position).limit(1))
+        session.execute(select(Report.id, Report.status).limit(1))
+        session.execute(select(AuditEvent.id).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:

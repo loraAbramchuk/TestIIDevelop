@@ -1,4 +1,4 @@
-# Контракт видео: этапы 1–8
+# Контракт видео: этапы 1–9
 
 Статус: реализованы метаданные, grants, передача исходника, обработка,
 защищённая раздача, удаление, каталог, каналы, подписки, лайки, комментарии и плейлисты. Схемы находятся в
@@ -316,3 +316,60 @@ uv run --locked pytest tests/test_video_contracts.py
 
 Схемы и JSON-контракт проверяются вместе. Тест сверяет x-implemented для каждой
 операции с действующим OpenAPI; GET/HEAD файлов и DELETE отмечены реализованными.
+
+
+## Жалобы, модерация и аудит
+
+Все изменения требуют сессии и CSRF. Служебные операции — moderator/admin;
+обычный пользователь получает 403, гость — 401. Ответы private/no-store, Vary: Cookie.
+
+| Метод | Endpoint | Ответ |
+| --- | --- | --- |
+| POST | `/api/videos/{video_id}/reports` | 201 ReportReceipt, 200 при повторе открытой жалобы; только доступное видео |
+| GET | `/api/moderation/reports?status=open&limit=20&cursor=...` | 200 ReportPage |
+| GET | `/api/moderation/reports/{report_id}` | 200 StaffReport |
+| POST | `/api/moderation/reports/{report_id}/decision` | 200 StaffReport |
+| GET | `/api/moderation/videos/{video_id}` | 200 ModerationVideo |
+| POST | `/api/moderation/videos/{video_id}/visibility` | 200 VideoModerationResult |
+| GET | `/api/moderation/audit?video_id=...&limit=20&cursor=...` | 200 AuditPage |
+
+ReportCreate: reason=spam/prohibited/copyright/other и необязательное explanation
+до 2000 символов (по умолчанию пустая строка). ReportReceipt: id, video_id,
+reason, explanation, status, created_at; без UUID отправителя и сведений решения.
+Повтор открытой жалобы не меняет reason/explanation; после закрытия возможна новая.
+StaffReport дополнительно содержит reporter_id, decided_at/decided_by/decision_reason
+и video: ModerationVideo. Статусы жалобы open/resolved/dismissed.
+
+ReportDecision: status=resolved/dismissed, reason. VideoModeration:
+status=hidden/visible, reason. Причина после trim — 1–2000 символов. Неизвестные
+поля, null, NUL, непарные суррогаты — 422; пробельная причина — 422.
+VideoModerationResult расширяет ModerationVideo полем changed: true только при
+реальном переходе состояния и записи нового аудита; false при уже установленном
+состоянии. Повтор возвращает 200 без нового аудита/замены причины.
+GET-профиль видео по-прежнему возвращает ModerationVideo без changed.
+Повтор решения с теми же status/reason возвращает первоначальное решение;
+изменение рассмотренной жалобы — 409 report_closed. Причина восстановления
+остаётся в истории; текущий moderation_reason после восстановления — null.
+
+ModerationVideo: id, owner_id, visibility, processing_status, moderation_status,
+moderation_reason, deleted, can_watch, nullable title/watch_url. Последние два
+выдаются только при обычном праве просмотра; ни роль, ни жалоба его не расширяют.
+Служебное чтение не содержит описания, poster/stream URL, grants или storage keys.
+Удалённое видео остаётся в деле, его восстановление — 409 video_deleted.
+Решение по жалобе на удалённое видео допустимо. Неизвестные UUID — 404
+video_not_found/report_not_found. Недоступное для жалобы видео — 404.
+
+ReportPage/AuditPage: items, nullable next_cursor. Статус очереди:
+open/resolved/dismissed/all, по умолчанию open; неверный — 422.
+Сортировка created_at/id по убыванию, limit 1–100 (20 по умолчанию), cursor
+до 1024 символов, привязан к сотруднику и фильтру; чужой/испорченный — 400 invalid_cursor.
+video_id истории необязателен, фильтрует действия с видео и решения его жалоб.
+AuditView: id, actor_id, object_type, object_id, action, reason, details, created_at.
+Действия video.hidden/video.restored/report.resolved/report.dismissed,
+details — previous_status/status и video_id для решения жалобы. Удаление объектов
+не каскадирует UUID аудита. Действие и его аудит записываются одной транзакцией.
+API изменения или удаления аудита нет.
+
+REPORT_CREATE_LIMIT_PER_HOUR=10 и MODERATION_WRITE_LIMIT_PER_MINUTE=120 —
+персональные лимиты; превышение — 429 с Retry-After. Попытки учитываются также
+при неуспешной предметной операции, повторные запросы расходуют лимит.

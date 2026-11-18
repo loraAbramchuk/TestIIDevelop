@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     playlist_write_limit_per_minute: int = Field(default=120, ge=1)
     playlist_create_limit_per_hour: int = Field(default=30, ge=1)
     playlist_max_items: int = Field(default=1000, ge=1, le=10000)
+    report_create_limit_per_hour: int = Field(default=10, ge=1)
+    moderation_write_limit_per_minute: int = Field(default=120, ge=1)
     upload_limit_per_hour: int = Field(default=30, ge=1)
     upload_cleanup_interval_seconds: int = Field(default=15, ge=1)
 

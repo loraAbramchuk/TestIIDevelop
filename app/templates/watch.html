@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script><script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/interactions.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script><script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/interactions.js') }}" defer></script><script src="{{ url_for('static', path='/report.js') }}" defer></script>{% endblock %}
 {% block content %}
   <article class="watch">
     <video id="video-player" controls playsinline preload="metadata" poster="{{ video.thumbnail_url }}" aria-label="{{ video.title }}">
@@ -15,6 +15,8 @@
     {% if user and user.id == video.owner_id %}
       <p><a href="/studio/videos/{{ video.id }}">Управление видео и доступом</a></p>
     {% endif %}
+    {% if user %}<details class="panel"><summary>Пожаловаться на видео</summary><form id="video-report" data-video-id="{{ video.id }}"><label for="report-reason">Причина жалобы</label><select id="report-reason" name="reason"><option value="spam">Спам</option><option value="prohibited">Запрещённый контент</option><option value="copyright">Нарушение прав</option><option value="other">Другое</option></select><label for="report-explanation">Пояснение к жалобе</label><textarea id="report-explanation" name="explanation" rows="3" maxlength="2000"></textarea><button type="submit">Отправить жалобу</button><p class="error" data-error role="alert"></p><p class="success" data-success role="status"></p></form></details>
+    {% else %}<p><a href="/login?next=/watch/{{ video.id }}">Войдите, чтобы пожаловаться</a></p>{% endif %}
   </article>
   <section id="interactions" class="watch" data-video-id="{{ video.id }}" aria-label="Лайки и комментарии">
     <div class="interaction-actions">

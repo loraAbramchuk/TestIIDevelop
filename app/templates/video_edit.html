@@ -4,12 +4,12 @@
 {% block content %}
   <p><a href="/studio">← Мои видео</a></p>
   <h1>Управление видео</h1>
-  <p id="video-status" role="status" aria-live="polite" data-processing-state="{{ video.processing_status }}" data-moderation-status="{{ video.moderation_status }}" data-error-code="{{ video.error_code or '' }}">{{ {'uploading':'Файл ещё не загружен', 'processing':'Видео обрабатывается', 'ready':'Видео готово', 'failed':'Ошибка обработки'}[video.processing_status] }}</p>
+  <p id="video-status" role="status" aria-live="polite" data-processing-state="{{ video.processing_status }}" data-moderation-status="{{ video.moderation_status }}" data-moderation-reason="{{ video.moderation_reason or '' }}" data-error-code="{{ video.error_code or '' }}">{{ {'uploading':'Файл ещё не загружен', 'processing':'Видео обрабатывается', 'ready':'Видео готово', 'failed':'Ошибка обработки'}[video.processing_status] }}</p>
   <p id="video-watch" {% if video.processing_status != 'ready' or video.moderation_status != 'visible' %}hidden{% endif %}><a href="/watch/{{ video.id }}">Смотреть видео</a></p>
   <p id="video-processing-note" {% if video.processing_status != 'processing' %}hidden{% endif %}>Файл принят. Обработка выполняется в фоне, статус обновится автоматически.</p>
   <p id="video-processing-error" class="error" role="alert">{% if video.error_code %}Не удалось завершить загрузку или обработку. Выберите файл для повторной загрузки.{% endif %}</p>
-  <button type="button" id="video-status-check" class="secondary" {% if video.processing_status != 'processing' %}hidden{% endif %}>Проверить статус</button>
-  {% if video.moderation_status == 'hidden' %}<p class="error">Скрыто модератором: {{ video.moderation_reason or 'Причина не указана' }}</p>{% endif %}
+  <button type="button" id="video-status-check" class="secondary">Проверить статус</button>
+  <p id="video-moderation-reason" class="error video-description" {% if video.moderation_status != 'hidden' %}hidden{% endif %}>Скрыто модератором: {{ video.moderation_reason or 'Причина не указана' }}</p>
   <section id="video-upload-panel" class="panel" aria-labelledby="upload-title" {% if video.processing_status not in ('uploading', 'failed') %}hidden{% endif %}>
     <h2 id="upload-title">Загрузить файл</h2>
     <form id="video-upload" data-video-id="{{ video.id }}" data-max-bytes="{{ max_upload_bytes }}">
