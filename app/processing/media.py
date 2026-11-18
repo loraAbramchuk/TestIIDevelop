@@ -70,9 +70,13 @@ def validate_probe(document: dict, settings) -> MediaInfo:
             if not 0 < rate <= settings.max_video_fps:
                 raise ProcessingError("video_frame_rate_exceeded")
         duration = float(format_["duration"])
-        if not math.isfinite(duration) or not 0 < duration <= settings.max_video_duration_seconds:
+        if not math.isfinite(duration) or duration <= 0:
             raise ProcessingError("video_duration_exceeded")
+        spans = []
         for stream in streams:
+            start = float(stream.get("start_time", 0))
+            if not math.isfinite(start):
+                raise ProcessingError("invalid_media")
             if "duration" in stream:
                 length = float(stream["duration"])
                 if (
@@ -80,6 +84,15 @@ def validate_probe(document: dict, settings) -> MediaInfo:
                     or not 0 < length <= settings.max_video_duration_seconds
                 ):
                     raise ProcessingError("video_duration_exceeded")
+                if "start_time" in stream:
+                    spans.append((start, start + length))
+        # MOV demuxer versions disagree whether format.duration includes a positive
+        # timestamp offset. Track spans preserve A/V offsets without counting that
+        # common offset as playback time. Fall back only when track timing is absent.
+        if len(spans) == len(streams):
+            duration = max(end for _, end in spans) - min(start for start, _ in spans)
+        if not math.isfinite(duration) or not 0 < duration <= settings.max_video_duration_seconds:
+            raise ProcessingError("video_duration_exceeded")
         if audios:
             audio = audios[0]
             if (
@@ -313,37 +326,45 @@ class MediaProcessor:
         )
         if remaining <= 0:
             raise ProcessingError("processing_budget_exceeded")
-        self.run(
-            "ffmpeg",
-            [
-                *common,
-                *self.input_options(),
-                "-ss",
-                str(min(info.duration / 2, 1)),
-                "-i",
-                source,
-                "-map",
-                "0:v:0",
-                "-frames:v",
-                "1",
-                "-an",
-                "-sn",
-                "-dn",
-                "-vf",
-                "scale=w='min(640,iw)':h='min(640,ih)':force_original_aspect_ratio=decrease",
-                "-threads",
-                "1",
-                "-c:v",
-                "mjpeg",
-                "-q:v",
-                "3",
-                "-f",
-                "image2",
-                destination.path("thumbnail.part"),
-            ],
-            maximum=remaining,
-        )
-        if destination.size("thumbnail.part") <= 0 or destination.size("playback.part") <= 0:
-            raise ProcessingError("invalid_media")
+        for seek in (min(prepared.duration / 2, 1), 0):
+            self.run(
+                "ffmpeg",
+                [
+                    *common,
+                    *self.input_options(),
+                    "-ss",
+                    str(seek),
+                    "-i",
+                    destination.path("playback.part"),
+                    "-map",
+                    "0:v:0",
+                    "-frames:v",
+                    "1",
+                    "-an",
+                    "-sn",
+                    "-dn",
+                    "-vf",
+                    "scale=w='min(640,iw)':h='min(640,ih)':force_original_aspect_ratio=decrease",
+                    "-threads",
+                    "1",
+                    "-c:v",
+                    "mjpeg",
+                    "-pix_fmt",
+                    "yuvj420p",
+                    "-q:v",
+                    "3",
+                    "-f",
+                    "image2",
+                    destination.path("thumbnail.part"),
+                ],
+                maximum=remaining,
+            )
+            try:
+                if destination.size("thumbnail.part") > 0:
+                    break
+            except FileNotFoundError:
+                pass  # FFmpeg can exit successfully without a frame after seeking.
+        else:
+            raise ProcessingError("thumbnail_generation_failed")
         destination.publish()
         return prepared

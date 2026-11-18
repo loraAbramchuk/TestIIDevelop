@@ -36,7 +36,12 @@ def process_video(
         if not service.clean_runs(upload_id):
             raise ProcessingBusy("previous_output_busy")
         service.check_space()
-        source_fd = os.open("source.mp4", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=source.directory_fd)
+        try:
+            source_fd = os.open(
+                "source.mp4", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=source.directory_fd
+            )
+        except FileNotFoundError:
+            raise ProcessingError("source_missing_or_changed") from None
         info = os.fstat(source_fd)
         if not stat.S_ISREG(info.st_mode) or info.st_size != claim.source_bytes:
             raise ProcessingError("source_missing_or_changed")
@@ -66,10 +71,6 @@ def process_video(
                 claim, error.code, permanent=not isinstance(error, TransientProcessingError)
             )
         raise
-    except FileNotFoundError:
-        if claim:
-            service.failure(claim, "source_missing_or_changed", permanent=True)
-        raise ProcessingError("source_missing_or_changed") from None
     except OSError as error:
         code = (
             "processing_storage_full"

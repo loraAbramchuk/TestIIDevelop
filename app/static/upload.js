@@ -9,6 +9,13 @@ if (uploadForm) {
   const error = uploadForm.querySelector('[data-error]');
   const manage = uploadForm.querySelector('#upload-manage');
   const fields = [...uploadForm.querySelectorAll('[name=title], [name=description], [name=visibility]')];
+  const cardStatus = document.getElementById('video-status');
+  const cardNote = document.getElementById('video-processing-note');
+  const cardError = document.getElementById('video-processing-error');
+  const cardCheck = document.getElementById('video-status-check');
+  const uploadPanel = document.getElementById('video-upload-panel');
+  const reportError = message => { (cardError || error).textContent = message; };
+  let watcher = null;
   let xhr = null;
   let busy = false;
   let accepted = false;
@@ -21,28 +28,52 @@ if (uploadForm) {
     manage.hidden = false;
     check.hidden = false;
   }
-  async function refreshStatus() {
-    if (!uploadForm.dataset.videoId) return;
-    const response = await fetch(`/api/videos/${uploadForm.dataset.videoId}/status`, {
-      credentials: 'same-origin', cache: 'no-store',
-    });
-    if (!response.ok) throw new Error('Не удалось проверить статус. Откройте «Мои видео» и обновите страницу.');
-    const video = await response.json();
+  function renderStatus(video) {
     accepted = ['processing', 'ready'].includes(video.processing_status);
     const messages = {
       uploading: 'Файл ещё не принят. Если передача была отменена, дождитесь завершения попытки и повторите её.',
       failed: 'Передача или обработка завершилась ошибкой. Можно загрузить файл повторно.',
-      processing: 'Файл принят и сохранён. Ожидает обработки; воспроизведение пока недоступно.',
+      processing: 'Файл принят. Обработка выполняется в фоне, статус обновится автоматически.',
       ready: 'Видео готово.',
     };
     status.textContent = messages[video.processing_status] || 'Обновите страницу, чтобы проверить статус.';
+    reportError(video.processing_status === 'failed' ? processingFailureMessage(video.error_code) : '');
+    if (cardStatus) {
+      const labels = {uploading: 'Файл ещё не загружен', processing: 'Видео обрабатывается', ready: 'Видео готово', failed: 'Ошибка обработки'};
+      cardStatus.textContent = labels[video.processing_status] || 'Статус неизвестен';
+      cardStatus.dataset.processingState = video.processing_status;
+      cardNote.hidden = video.processing_status !== 'processing';
+      cardCheck.hidden = video.processing_status !== 'processing';
+      uploadPanel.hidden = accepted;
+    }
     updateControls();
   }
-  check.addEventListener('click', async () => {
-    check.disabled = true;
-    try { await refreshStatus(); error.textContent = ''; }
-    catch (failure) { error.textContent = failure.message; }
-    finally { check.disabled = false; }
+  function getWatcher() {
+    if (!watcher && uploadForm.dataset.videoId) {
+      watcher = watchVideoStatus(uploadForm.dataset.videoId, renderStatus, reportError);
+    }
+    return watcher;
+  }
+  async function refreshStatus() { return await getWatcher()?.refresh(); }
+  for (const button of [check, cardCheck].filter(Boolean)) {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const video = await refreshStatus();
+        if (video?.processing_status === 'processing') getWatcher().start();
+      } catch (failure) { if (failure.name !== 'AbortError') reportError(failure.message); }
+      finally { button.disabled = false; }
+    });
+  }
+  if (cardStatus) {
+    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode});
+    if (accepted && cardStatus.dataset.processingState === 'processing') getWatcher().start();
+  }
+  window.addEventListener('pageshow', event => {
+    if (event.persisted && accepted) {
+      watcher?.dispose(); watcher = null;
+      getWatcher().start();
+    }
   });
   cancel.addEventListener('click', () => { if (xhr) xhr.abort(); });
   uploadForm.addEventListener('submit', async event => {
@@ -55,6 +86,8 @@ if (uploadForm) {
       error.textContent = 'Файл превышает допустимый размер.'; return;
     }
     busy = true;
+    watcher?.dispose(); watcher = null;
+    reportError('');
     // Keep metadata stable while the request is active; retries update the same card.
     const metadata = Object.fromEntries(fields.map(field => [field.name, field.value]));
     updateControls();
@@ -94,7 +127,8 @@ if (uploadForm) {
         cancel.hidden = false;
         xhr.send(file);
       });
-      status.textContent = 'Файл принят и сохранён. Ожидает обработки; воспроизведение пока недоступно.';
+      renderStatus({processing_status: 'processing'});
+      getWatcher().start();
       progress.value = 100;
     } catch (failure) {
       error.textContent = failure instanceof TypeError ? 'Ошибка соединения. Проверьте статус и повторите попытку.' : failure.message;

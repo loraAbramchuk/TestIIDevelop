@@ -34,8 +34,7 @@ const fs=require('node:fs');
    for(let i=0;i<40;i++){
     const status=await(await context.request.get(base+`/api/videos/${id}/status`)).json();
     if(status.processing_status===expected){
-     await page.getByRole('button',{name:'Проверить статус',exact:true}).click();
-     await page.waitForFunction(()=>!document.getElementById('upload-check').disabled);
+     await page.waitForFunction(expected=>document.getElementById('upload-status').textContent.includes(expected==='ready'?'Видео готово.':'завершилась ошибкой'),expected);
      return status;
     }
     if(status.processing_status==='failed'&&expected==='ready') throw new Error(JSON.stringify(status));
@@ -57,6 +56,7 @@ const fs=require('node:fs');
   const second=await upload(media+'/unsupported-10bit.mp4','Неподдерживаемый профиль');
   const failed=await waitStatus(second,'failed');
   assert.equal(failed.error_code,'unsupported_media');
+  await page.getByText('Формат видео не поддерживается.',{exact:false}).waitFor();
   assert.ok(await page.getByLabel('Название',{exact:true}).isEditable());
   assert.ok(await page.getByRole('button',{name:'Загрузить',exact:true}).isEnabled());
   assert.equal(await upload(media+'/h264-silent.mp4','Исправленный файл',false),second);
@@ -69,7 +69,7 @@ const fs=require('node:fs');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:'/tmp/stage4-studio-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  const report={browser:browser.version(),result:'passed',video_id:first,retried_video_id:second,checks:['real upload and worker ready','metadata extracted','private metadata protected','playback still planned stage 5','10-bit fails with safe code','failed form permits retry','same card retry reaches ready','studio persists ready','mobile layout','no JS errors']};
+  const report={browser:browser.version(),result:'passed',video_id:first,retried_video_id:second,checks:['real upload and automatic ready status','metadata extracted','private metadata protected','playback still planned stage 5','10-bit automatically shows actionable error','failed form permits retry','same card retry reaches ready','studio persists ready','mobile layout','no JS errors']};
   fs.writeFileSync('/tmp/stage4-browser.json',JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report));
  }finally{await browser.close()}

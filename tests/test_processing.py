@@ -40,6 +40,39 @@ def samples(tmp_path_factory):
         capture_output=True,
         timeout=90,
     )
+    for name, arguments in (
+        (
+            "one-frame",
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red:s=320x180:r=24",
+                "-frames:v",
+                "1",
+                "-c:v",
+                "libx264",
+                "-threads",
+                "1",
+                "-profile:v",
+                "main",
+                "-level:v",
+                "3.1",
+                "-pix_fmt",
+                "yuv420p",
+            ],
+        ),
+        (
+            "timestamp-offset",
+            ["-i", str(root / "h264-aac.mp4"), "-c", "copy", "-output_ts_offset", "5"],
+        ),
+    ):
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", *arguments, str(root / f"{name}.mp4")],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
     return root
 
 
@@ -136,7 +169,7 @@ def execute(processing, identifiers):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("sample", ["h264-aac", "h264-silent"])
+@pytest.mark.parametrize("sample", ["h264-aac", "h264-silent", "one-frame", "timestamp-offset"])
 def test_actual_mp4_to_ready_preserves_source_and_produces_faststart_preview(
     processing, samples, sample
 ):
@@ -148,7 +181,11 @@ def test_actual_mp4_to_ready_preserves_source_and_produces_faststart_preview(
         upload = db.get(UploadAttempt, identifiers[1])
         assert video.processing_status == "ready" and upload.state == "stored"
         assert video.visibility == "private" and video.moderation_status == "visible"
-        assert video.width == 320 and video.height == 180 and 1.9 < video.duration_seconds < 2.2
+        assert video.width == 320 and video.height == 180
+        if sample == "one-frame":
+            assert 0 < video.duration_seconds < 0.05
+        else:
+            assert 1.9 < video.duration_seconds < 2.2
         root = processing.settings.media_root
         assert (root / video.source_key).read_bytes() == original
         playback = (root / video.playback_key).read_bytes()
@@ -280,9 +317,70 @@ def test_probe_policy_rejects_unsupported_and_unbounded_media(probe_document, ch
         video["width"] = 3840
     elif change == "duration":
         document["format"]["duration"] = "7201"
+        video["duration"] = "7201"
     settings = Settings(_env_file=None, postgres_password="processing-policy-test-password")
     with pytest.raises(ProcessingError):
         validate_probe(document, settings)
+
+
+@pytest.mark.parametrize("container_duration", ["2.022", "7.000"])
+def test_probe_duration_uses_track_span_across_ffprobe_versions(probe_document, container_duration):
+    document = copy.deepcopy(probe_document)
+    document["format"].update(start_time="4.978", duration=container_duration)
+    document["streams"][0].update(start_time="5.000", duration="2.000")
+    document["streams"][1].update(start_time="4.978", duration="2.021333")
+    settings = Settings(
+        _env_file=None,
+        postgres_password="processing-policy-test-password",
+        max_video_duration_seconds=3,
+    )
+    assert validate_probe(document, settings).duration == pytest.approx(2.022)
+
+
+@pytest.mark.parametrize("case", ["gap", "nan_start", "infinite_start", "missing_timing"])
+def test_probe_rejects_unbounded_or_invalid_track_timeline(probe_document, case):
+    document = copy.deepcopy(probe_document)
+    if case == "gap":
+        document["streams"][1]["start_time"] = "7201"
+    elif case == "missing_timing":
+        document["streams"][0].pop("duration")
+        document["format"]["duration"] = "7201"
+    else:
+        document["streams"][0]["start_time"] = "NaN" if case == "nan_start" else "Infinity"
+    settings = Settings(_env_file=None, postgres_password="processing-policy-test-password")
+    with pytest.raises(ProcessingError):
+        validate_probe(document, settings)
+
+
+@pytest.mark.integration
+def test_missing_source_is_reported_as_source_error(processing, samples):
+    identifiers = processing.upload((samples / "h264-silent.mp4").read_bytes())
+    with processing.factory() as db:
+        source = db.get(Video, identifiers[0]).source_key
+    (processing.settings.media_root / source).unlink()
+    with pytest.raises(ProcessingError, match="source_missing_or_changed"):
+        execute(processing, identifiers)
+    with processing.factory() as db:
+        assert db.get(Video, identifiers[0]).error_code == "source_missing_or_changed"
+
+
+@pytest.mark.integration
+def test_no_thumbnail_has_its_own_error_instead_of_missing_source(processing, samples, monkeypatch):
+    identifiers = processing.upload((samples / "h264-silent.mp4").read_bytes())
+    run = MediaProcessor.run
+
+    def no_thumbnail(self, tool, arguments, **kwargs):
+        if arguments[-1].endswith("thumbnail.part"):
+            return b""
+        return run(self, tool, arguments, **kwargs)
+
+    monkeypatch.setattr(MediaProcessor, "run", no_thumbnail)
+    with pytest.raises(ProcessingError, match="thumbnail_generation_failed"):
+        execute(processing, identifiers)
+    with processing.factory() as db:
+        video = db.get(Video, identifiers[0])
+        assert video.processing_status == "failed"
+        assert video.error_code == "thumbnail_generation_failed"
 
 
 def test_subprocess_timeout_and_lost_lease_do_not_leave_media_running(tmp_path):

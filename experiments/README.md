@@ -127,6 +127,25 @@ docker compose -p stage4-verify -f compose.yaml up --no-build --detach --wait
 node experiments/processing_browser_probe.cjs /tmp/stage1-media
 ```
 
+Проверка статуса теперь ждёт автоматического обновления до ready/failed,
+без нажатия кнопки. Для регрессий короткого ролика, временных меток и открытой
+карточки есть дополнительная проверка. Она **останавливает и запускает только
+явно указанный тестовый worker**; допускаются stage4-verify-worker-1 и
+stage4-fixes-worker-1. Остальные контейнеры не затрагиваются:
+
+```bash
+PROCESSING_TEST_BASE_URL=http://127.0.0.1:8086 \
+PROCESSING_TEST_WORKER_CONTAINER=stage4-verify-worker-1 \
+node experiments/processing_status_browser_probe.cjs /tmp/stage1-media
+```
+
+Сценарий проверяет ready/failed на двух одновременно открытых страницах,
+сохранение несохранённых метаданных, появление формы повтора без reload,
+остановку опроса после трёх сетевых ошибок и возобновление кнопкой. Он также
+генерирует однокадровое MP4 и MP4 со сдвигом timestamp на 5 секунд и обрабатывает
+их настоящим контейнерным FFmpeg. Требуются локальные Docker CLI, FFmpeg и
+Playwright. Отчёт — /tmp/stage4-fixes-browser.json.
+
 Прежний upload_browser_probe.cjs рассчитан на остановленный worker и ожидает
 processing. Если контур уже существовал с worker, сначала остановите **только
 его** `docker compose -p stage3-verify stop worker`. Основной контур не затрагивайте.
