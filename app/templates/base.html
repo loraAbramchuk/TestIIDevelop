@@ -24,8 +24,8 @@
           <span class="account-name">{{ user.display_name }}</span>
           <button type="button" id="logout">Выйти</button>
         {% else %}
-          <a href="/login">Войти</a>
-          <a href="/register">Регистрация</a>
+          <a href="/login{% if next_path is defined %}?next={{ next_path|urlencode }}{% endif %}">Войти</a>
+          <a href="/register{% if next_path is defined %}?next={{ next_path|urlencode }}{% endif %}">Регистрация</a>
         {% endif %}
       </nav>
     </header>

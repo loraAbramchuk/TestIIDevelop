@@ -20,7 +20,7 @@
     {% elif user %}
       <button id="subscribe" type="button" data-subscribed="{{ 'true' if channel.is_subscribed else 'false' }}" aria-pressed="{{ 'true' if channel.is_subscribed else 'false' }}">{{ 'Отписаться' if channel.is_subscribed else 'Подписаться' }}</button>
       <p class="error" id="subscription-error" role="alert"></p>
-    {% else %}<p><a href="/login">Войдите, чтобы подписаться</a></p>{% endif %}
+    {% else %}<p><a href="/login?next={{ ('/channels/' ~ channel.id)|urlencode }}">Войдите, чтобы подписаться</a></p>{% endif %}
   </section>
   <h2>Видео канала</h2>
   {% if page['items'] %}{% include "video_grid.html" %}{% else %}<p>Здесь пока нет доступных видео.</p>{% endif %}

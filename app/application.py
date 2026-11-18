@@ -19,6 +19,7 @@ from app.config import Settings
 from app.db import make_engine, make_session_factory
 from app.errors import DomainError
 from app.models import User
+from app.navigation import local_return_path
 from app.storage_health import initialize_storage
 from app.templating import PACKAGE_ROOT, templates
 from app.uploads.router import router as upload_router
@@ -157,8 +158,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/register", response_class=HTMLResponse, include_in_schema=False)
     def auth_page(request: Request, user: Annotated[User | None, Depends(optional_user)]):
+        next_path = local_return_path(request.query_params.get("next"))
         if user:
-            return RedirectResponse("/", status_code=303)
+            return RedirectResponse(next_path, status_code=303)
         return templates.TemplateResponse(
             request=request,
             name="auth.html",
@@ -166,6 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "app_name": settings.app_name,
                 "user": None,
                 "register": request.url.path == "/register",
+                "next_path": next_path,
             },
         )
 

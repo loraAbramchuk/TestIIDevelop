@@ -9,6 +9,7 @@ from app.catalog.router import SearchQuery
 from app.catalog.schemas import CatalogPage
 from app.channels import service as channels
 from app.errors import DomainError
+from app.navigation import login_redirect
 from app.templating import templates
 from app.videos.pages import PageUser
 from app.videos.router import PageCursor, PageLimit
@@ -64,7 +65,7 @@ def search(
 @router.get("/my-channel")
 def mine(request: Request, db: Db, user: PageUser):
     if user is None:
-        return RedirectResponse("/login", status_code=303)
+        return login_redirect(request)
     try:
         channel = channels.my_channel(db, user.id)
         return RedirectResponse(f"/channels/{channel.id}", status_code=303)
@@ -104,7 +105,7 @@ def subscriptions(
     request: Request, db: Db, user: PageUser, limit: PageLimit = 20, cursor: PageCursor = None
 ):
     if user is None:
-        return RedirectResponse("/login", status_code=303)
+        return login_redirect(request)
     try:
         return render(
             request,

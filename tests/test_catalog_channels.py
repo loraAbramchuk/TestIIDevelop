@@ -1,3 +1,4 @@
+import json
 import os
 import secrets
 from concurrent.futures import ThreadPoolExecutor
@@ -249,8 +250,20 @@ def test_channel_edit_is_owner_only_and_does_not_touch_videos(catalog):
         {"description": "x" * 2001},
         {"owner_id": str(c.actors["stranger"].id)},
         {"name": "\x00"},
+        {"name": "A\ud800B"},
+        {"name": "A\udfffB"},
+        {"description": "A\x00B"},
+        {"description": "A\ud800B"},
+        {"description": "A\udfffB"},
     ):
-        assert c.client.patch(url, json=payload, headers=actor.headers).status_code == 422
+        assert (
+            c.client.patch(
+                url,
+                content=json.dumps(payload),
+                headers=actor.headers | {"Content-Type": "application/json"},
+            ).status_code
+            == 422
+        )
     changed = c.client.patch(
         url,
         json={"name": "  Новый канал  ", "description": "<script>unsafe()</script>\nОписание"},
@@ -265,6 +278,30 @@ def test_channel_edit_is_owner_only_and_does_not_touch_videos(catalog):
         actor.channel
     )
     assert c.client.get("/api/channels/me").status_code == 401
+
+
+@pytest.mark.parametrize("field", ["title", "description"])
+@pytest.mark.parametrize("value", ["A\x00B", "A\ud800B", "A\udfffB"])
+def test_invalid_video_metadata_is_422_without_creating_or_changing_video(catalog, field, value):
+    c = catalog
+    video = c.seed(title="Unchanged")
+    headers = c.actors["owner"].headers | {"Content-Type": "application/json"}
+    with c.factory() as db:
+        count = db.scalar(select(func.count()).select_from(Video))
+    payload = {"title": "Valid", field: value}
+    assert (
+        c.client.post("/api/videos", content=json.dumps(payload), headers=headers).status_code
+        == 422
+    )
+    assert (
+        c.client.patch(
+            f"/api/videos/{video}", content=json.dumps({field: value}), headers=headers
+        ).status_code
+        == 422
+    )
+    with c.factory() as db:
+        assert db.scalar(select(func.count()).select_from(Video)) == count
+        assert db.get(Video, UUID(video)).title == "Unchanged"
 
 
 def test_subscriptions_idempotent_private_list_and_self_guard(catalog):

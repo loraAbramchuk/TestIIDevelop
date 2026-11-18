@@ -4,6 +4,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
+from app.text_validation import validate_text
+
 
 def omit_default(schema):
     schema.pop("default", None)
@@ -40,9 +42,8 @@ class ChannelPatch(BaseModel):
     def validate_text(cls, value, info):
         if value is None:
             raise ValueError("Omit unchanged fields instead of null")
+        value = validate_text(value)
         if isinstance(value, str):
-            if "\x00" in value:
-                raise ValueError("NUL is not allowed")
             if info.field_name == "name":
                 return value.strip()
         return value

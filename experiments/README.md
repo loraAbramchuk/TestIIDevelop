@@ -240,6 +240,7 @@ PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 \
 docker compose -p stage6-verify -f compose.yaml up --no-build --detach --wait
 
 CATALOG_TEST_PROJECT=stage6-verify node experiments/catalog_browser_probe.cjs
+AUTH_TEST_PROJECT=stage6-verify node experiments/auth_recovery_browser_probe.cjs
 PLAYBACK_TEST_BASE_URL=http://127.0.0.1:8091 node experiments/playback_browser_probe.cjs
 DOCS_TEST_BASE_URL=http://127.0.0.1:8091 node experiments/docs_browser_probe.cjs
 ```
@@ -249,12 +250,21 @@ DOCS_TEST_BASE_URL=http://127.0.0.1:8091 node experiments/docs_browser_probe.cjs
 тестового db. Проверяются публичная лента, native-воспроизведение из карточки,
 превью, поиск с literal-символами и кириллицей, пагинация, редактирование канала
 с сохранением ввода при 503, подписки, отсутствие доступа по подписке и grant/revoke.
-Проверяются ширины 320/390/768/1440 px. Совместно с playback создаются четыре
-аккаунта — меньше лимита регистрации 5/IP/час. Для повторов нужен новый тестовый
+Проверяются ширины 320/390/768/1440 px. Совместно с auth recovery и playback
+создаются пять аккаунтов — в пределах лимита регистрации 5/IP/час. Для повторов нужен новый тестовый
 контур или истечение окна лимита; основную БД для обхода лимитов не изменяйте.
 Артефакты: /tmp/stage6-browser.json, /tmp/stage6-home-{desktop,mobile}.png,
 /tmp/stage6-channel-mobile.png. Playback сохраняет /tmp/stage5-browser.json;
 docs печатает JSON в stdout и сохраняет /tmp/swagger-local.png.
+
+Auth recovery использует один новый аккаунт и проверяет HTML/пустые ошибки от
+CSRF/регистрации/входа, JSON null, отсутствие CSRF-токена, обрыв соединения и 429.
+После ошибки ввод сохраняется, кнопка снова доступна; реальная повторная попытка
+завершается возвращением к каналу после регистрации и входа. Проверяется перенос
+`next` между экранами и отклонение внешних адресов возврата, а также 422 для NUL
+и непарных суррогатов в профиле при сохранении корректных emoji.
+Если каталог пуст, сценарий использует `/my-channel` как исходную защищённую страницу.
+Артефакты: /tmp/stage6-auth-recovery.json и /tmp/stage6-auth-friendly-error.png.
 
 Проверка миграции требует отдельной **пустой** БД с суффиксом `_probe` и
 Python-зависимостей разработки. Создайте её заранее в dev PostgreSQL:

@@ -2,11 +2,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 
 from app.auth_dependencies import Db, optional_user
 from app.models import Channel, User
+from app.navigation import login_redirect
 from app.templating import templates
 from app.videos import service
 from app.videos.router import PageCursor, PageLimit
@@ -45,7 +46,7 @@ def studio(
     request: Request, db: Db, user: PageUser, limit: PageLimit = 20, cursor: PageCursor = None
 ):
     if user is None:
-        return RedirectResponse("/login", status_code=303)
+        return login_redirect(request)
     page = service.list_owned(db, user.id, limit, cursor)
     return templates.TemplateResponse(
         request=request,
@@ -64,7 +65,7 @@ def edit_page(
     cursor: PageCursor = None,
 ):
     if user is None:
-        return RedirectResponse("/login", status_code=303)
+        return login_redirect(request)
     video = service.owned_video(db, video_id, user.id)
     grants = service.list_grants(db, video_id, user.id, limit, cursor)
     return templates.TemplateResponse(
@@ -83,7 +84,7 @@ def edit_page(
 @router.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request, user: PageUser):
     if user is None:
-        return RedirectResponse("/login", status_code=303)
+        return login_redirect(request)
     return templates.TemplateResponse(
         request=request,
         name="upload.html",
