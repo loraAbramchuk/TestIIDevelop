@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from procrastinate.exceptions import ConnectorException
 from sqlalchemy import exists, func, select, update
 
-from app.models import UploadAdmission, UploadAttempt, Video
+from app.models import ProcessingRun, UploadAdmission, UploadAttempt, Video
 from app.uploads.queue import enqueue_processing
 from app.uploads.storage import attempt_key, remove_attempt
 from app.videos.service import VideoError, owned_video
@@ -216,6 +216,8 @@ class UploadService:
             video.error_code = code
             video.source_key = None
             video.source_bytes = None
+            video.playback_key = video.thumbnail_key = None
+            video.playback_bytes = video.thumbnail_bytes = None
 
     def clean(self, identifier: UUID) -> bool:
         with self.sessions() as db:
@@ -235,8 +237,24 @@ class UploadService:
                 self._mark_cleanup(video, attempt, "upload_expired")
             if attempt.state not in ("cleanup", "cleaned"):
                 return False
+            runs = list(
+                db.scalars(select(ProcessingRun).where(ProcessingRun.upload_id == identifier))
+            )
+            run_ids = [run.id for run in runs]
+            for run in runs:
+                run.state, run.lease_until = "cleanup", None
             db.commit()
         # Never hold quota/database locks during filesystem I/O.
+        from app.processing.storage import remove_run
+
+        for run_id in run_ids:
+            if not remove_run(self.settings.media_root, run_id):
+                return False
+        with self.sessions() as db:
+            db.execute(
+                update(ProcessingRun).where(ProcessingRun.id.in_(run_ids)).values(state="cleaned")
+            )
+            db.commit()
         if not remove_attempt(self.settings.media_root, identifier):
             return False
         with self.sessions() as db:

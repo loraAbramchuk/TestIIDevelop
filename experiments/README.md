@@ -73,7 +73,7 @@ Firefox/Safari не объявляются проверенными. Откло�
 POSTGRES_PASSWORD="$TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage3_browser HTTP_PORT=8083 \
 MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=20971520 \
 MEDIA_CAPACITY_BYTES=67108864 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=65536 \
-docker compose -p stage3-verify -f compose.yaml up --no-build --detach --wait
+docker compose -p stage3-verify -f compose.yaml up --no-build --detach --wait db migrate app upload-maintenance web
 node experiments/upload_browser_probe.cjs /tmp/stage1-media/h264-aac.mp4
 uv run --locked python experiments/upload_transport_probe.py
 ```
@@ -109,3 +109,40 @@ uv run --locked python experiments/upload_crash_probe.py
 его SIGKILL в середине потока, сдвигает истёкшую аренду в тестовой БД, запускает
 maintenance --once и проверяет сохранение ранее принятого исходника/задания
 после restart. БД и тестовые файлы остаются для осмотра.
+
+
+## Обработка: этап 4
+
+Для проверки загрузки до ready/failed используйте новый отдельный Compose-контур
+с работающим worker. Скрипт создаёт аккаунт, загружает настоящий H.264/AAC,
+проверяет ready и закрытость приватных метаданных, затем 10-bit отказ и повтор
+совместимого файла в ту же карточку. Плеер/раздача в этот этап не входят.
+
+```bash
+# После сборки актуального образа штатным scripts/start.sh:
+POSTGRES_PASSWORD="$TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage4_browser HTTP_PORT=8086 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=33554432 \
+MEDIA_CAPACITY_BYTES=268435456 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=262144 \
+docker compose -p stage4-verify -f compose.yaml up --no-build --detach --wait
+node experiments/processing_browser_probe.cjs /tmp/stage1-media
+```
+
+Прежний upload_browser_probe.cjs рассчитан на остановленный worker и ожидает
+processing. Если контур уже существовал с worker, сначала остановите **только
+его** `docker compose -p stage3-verify stop worker`. Основной контур не затрагивайте.
+
+SIGKILL-проверка требует отдельную пустую мигрированную БД с суффиксом `_probe`,
+свежий отдельный MEDIA_ROOT и образцы из make_media_samples.py в /tmp/stage1-media:
+
+```bash
+POSTGRES_DB=stage4_crash_probe uv run --locked alembic upgrade head
+POSTGRES_DB=stage4_crash_probe MEDIA_ROOT=/tmp/stage4-crash-media \
+PROCESSING_LEASE_SECONDS=4 PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 \
+uv run --locked python experiments/processing_crash_probe.py
+```
+
+DB_HOST/DB_PORT/POSTGRES_* задаются для этой тестовой БД. Скрипт убивает только
+собственный worker в момент реального FFmpeg/ffprobe, проверяет смерть child и
+освобождение блокировки, дожидается настоящего срока аренды, выполняет maintenance
+--once, запускает новый worker и проверяет ready, исходник и итоговый ack.
+Тестовые БД/файлы остаются для осмотра. Результаты: [этап 4](../docs/verification/stage-4.md).

@@ -26,6 +26,8 @@ jobs:
         with:
           version: "0.13.5"
           python-version: "3.12"
+      - name: Install FFmpeg for actual media checks
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: uv sync --locked
       - run: uv run --locked ruff check app migrations tests scripts experiments
       - run: uv run --locked ruff format --check app migrations tests scripts experiments

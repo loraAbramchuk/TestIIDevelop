@@ -212,11 +212,11 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 3 metadata/ACL/upload, planned playback",
-            "version": "0.3.0",
+            "title": "Video API contracts — stage 4 processing, planned playback",
+            "version": "0.4.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
-                "только рабочие маршруты. Обработка, stream/thumbnail и удаление "
+                "только рабочие маршруты. Stream/thumbnail и удаление "
                 "остаются проектными. Secure cookie называется __Host-video_session."
             ),
         },

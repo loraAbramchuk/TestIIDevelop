@@ -1,4 +1,4 @@
-// Run only against a disposable database. Uploads remain queued until stage 4.
+// Run only against a disposable database with worker stopped; use processing_browser_probe.cjs for a running worker.
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');

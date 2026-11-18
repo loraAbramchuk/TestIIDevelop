@@ -16,11 +16,14 @@ class Base(DeclarativeBase):
     )
 
 
-def make_engine(settings: Settings):
+def make_engine(settings: Settings, *, query_timeout=False):
+    arguments = {"connect_timeout": 3}
+    if query_timeout:
+        arguments["options"] = "-cstatement_timeout=5000 -clock_timeout=3000"
     return create_engine(
         settings.database_url,
         pool_pre_ping=True,
-        connect_args={"connect_timeout": 3},
+        connect_args=arguments,
     )
 
 

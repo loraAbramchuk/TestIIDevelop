@@ -10,12 +10,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models import (
     AuthRateLimit,
     AuthSession,
+    ProcessingRun,
+    ProcessingWorker,
     UploadAdmission,
     UploadAttempt,
     User,
     Video,
     VideoGrant,
 )
+from app.processing.health import live_workers
 from app.storage_health import check_storage_read, check_storage_write
 
 logger = logging.getLogger(__name__)
@@ -42,9 +45,11 @@ def check_database(request: Request) -> None:
         session.execute(select(User.id).limit(1))
         session.execute(select(AuthSession.token_hash).limit(1))
         session.execute(select(AuthRateLimit.key).limit(1))
-        session.execute(select(Video.id).limit(1))
+        session.execute(select(Video.id, Video.playback_key, Video.thumbnail_key).limit(1))
         session.execute(select(VideoGrant.user_id).limit(1))
-        session.execute(select(UploadAttempt.id).limit(1))
+        session.execute(select(UploadAttempt.id, UploadAttempt.current_run_id).limit(1))
+        session.execute(select(ProcessingRun.id).limit(1))
+        session.execute(select(ProcessingWorker.id).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:
@@ -107,16 +112,22 @@ def diagnostics(request: Request, response: Response) -> Diagnostics:
             )
     except SQLAlchemyError:
         checks["upload_queue"] = "error"
-    # No worker exists yet. A future processing adapter must report its actual heartbeat.
-    checks["processing"] = "not_configured"
+    try:
+        with request.app.state.session_factory() as session:
+            checks["processing"] = "ok" if live_workers(session, settings) else "error"
+    except SQLAlchemyError:
+        checks["processing"] = "error"
     status = "ok"
     if checks["database"] == "error" or checks["storage"] == "error":
         status = "unavailable"
     elif any(checks[key] != "ok" for key in ("storage_write", "disk_reserve", "upload_queue")):
         status = "degraded"
+    uploads_available = status == "ok"
+    if status == "ok" and checks["processing"] != "ok":
+        status = "degraded"
     response.headers["Cache-Control"] = "no-store"
     return Diagnostics(
         status=status,
         checks=checks,
-        video_uploads="available" if status == "ok" else "unavailable",
+        video_uploads="available" if uploads_available else "unavailable",
     )

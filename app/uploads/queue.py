@@ -11,7 +11,9 @@ def queue_app(settings):
                 "dbname": settings.postgres_db,
                 "user": settings.postgres_user,
                 "password": settings.postgres_password.get_secret_value(),
-                "options": "-csearch_path=video_queue,public",
+                "options": (
+                    "-csearch_path=video_queue,public -cstatement_timeout=5000 -clock_timeout=3000"
+                ),
                 "connect_timeout": 3,
             },
             min_size=1,
