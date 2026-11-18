@@ -463,13 +463,14 @@ def test_grants_cursor_ties_and_malformed_input(video_client, actors, seed_video
     assert video_client.get(base, params={"limit": 101}).status_code == 422
 
 
-def test_authentication_csrf_and_unimplemented_media(video_client, actors, seed_video):
+def test_authentication_csrf_and_unavailable_media(video_client, actors, seed_video):
     video_id = seed_video()
     actions = [
         ("post", "/api/videos", {"title": "New"}),
         ("patch", f"/api/videos/{video_id}", {"title": "Changed"}),
         ("put", f"/api/videos/{video_id}/grants/{actors['allowed']['id']}", None),
         ("delete", f"/api/videos/{video_id}/grants/{actors['allowed']['id']}", None),
+        ("delete", f"/api/videos/{video_id}", None),
     ]
     for method, url, body in actions:
         act(video_client, actors, None)
@@ -479,12 +480,13 @@ def test_authentication_csrf_and_unimplemented_media(video_client, actors, seed_
             assert video_client.request(method, url, json=body, headers=headers).status_code == 403
     for suffix in ("stream", "thumbnail"):
         response = video_client.get(f"/api/videos/{video_id}/{suffix}")
-        assert response.status_code == 404
+        assert response.status_code == 503  # Fixture has metadata but no processed file.
+        assert response.json()["code"] == "media_unavailable"
     assert (
         video_client.delete(
             f"/api/videos/{video_id}", headers=act(video_client, actors, "owner")
         ).status_code
-        == 405
+        == 204
     )
 
 

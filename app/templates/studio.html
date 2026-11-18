@@ -18,6 +18,9 @@
       <article class="video-row">
         <a href="/studio/videos/{{ video.id }}">{{ video.title }}</a>
         <span>{{ 'Приватное' if video.visibility == 'private' else 'Публичное' }} · {{ {'uploading':'Ожидает загрузки', 'processing':'Обрабатывается', 'ready':'Готово', 'failed':'Ошибка загрузки или обработки'}[video.processing_status] }}{% if video.moderation_status == 'hidden' %} · Скрыто модератором{% endif %}</span>
+        {% if video.processing_status == 'ready' and video.moderation_status == 'visible' %}
+          <a class="video-preview-link" href="/watch/{{ video.id }}"><img class="video-preview" src="/api/videos/{{ video.id }}/thumbnail" alt="Превью видео" loading="lazy">Смотреть видео</a>
+        {% endif %}
       </article>
     {% else %}<p>Карточек видео пока нет.</p>{% endfor %}
     {% if page.next_cursor %}<a href="/studio?cursor={{ page.next_cursor|urlencode }}">Следующая страница</a>{% endif %}

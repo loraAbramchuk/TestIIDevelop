@@ -4,7 +4,8 @@
 {% block content %}
   <p><a href="/studio">← Мои видео</a></p>
   <h1>Управление видео</h1>
-  <p id="video-status" role="status" aria-live="polite" data-processing-state="{{ video.processing_status }}" data-error-code="{{ video.error_code or '' }}">{{ {'uploading':'Файл ещё не загружен', 'processing':'Видео обрабатывается', 'ready':'Видео готово', 'failed':'Ошибка обработки'}[video.processing_status] }}</p>
+  <p id="video-status" role="status" aria-live="polite" data-processing-state="{{ video.processing_status }}" data-moderation-status="{{ video.moderation_status }}" data-error-code="{{ video.error_code or '' }}">{{ {'uploading':'Файл ещё не загружен', 'processing':'Видео обрабатывается', 'ready':'Видео готово', 'failed':'Ошибка обработки'}[video.processing_status] }}</p>
+  <p id="video-watch" {% if video.processing_status != 'ready' or video.moderation_status != 'visible' %}hidden{% endif %}><a href="/watch/{{ video.id }}">Смотреть видео</a></p>
   <p id="video-processing-note" {% if video.processing_status != 'processing' %}hidden{% endif %}>Файл принят. Обработка выполняется в фоне, статус обновится автоматически.</p>
   <p id="video-processing-error" class="error" role="alert">{% if video.error_code %}Не удалось завершить загрузку или обработку. Выберите файл для повторной загрузки.{% endif %}</p>
   <button type="button" id="video-status-check" class="secondary" {% if video.processing_status != 'processing' %}hidden{% endif %}>Проверить статус</button>
@@ -40,5 +41,13 @@
     </ul>
     <p class="error" role="alert" id="grant-error"></p>
     {% if grants.next_cursor %}<a href="/studio/videos/{{ video.id }}?cursor={{ grants.next_cursor|urlencode }}">Следующая страница разрешений</a>{% endif %}
+  </section>
+  <section class="panel" aria-labelledby="delete-title">
+    <h2 id="delete-title">Удаление видео</h2>
+    <p>Просмотр будет закрыт сразу. Загрузка или обработка остановится, а файлы будут удалены в фоне.</p>
+    <form id="video-delete" data-video-id="{{ video.id }}">
+      <p class="error" role="alert" data-error></p>
+      <button type="submit" class="danger">Удалить видео</button>
+    </form>
   </section>
 {% endblock %}

@@ -61,3 +61,20 @@ for (const button of document.querySelectorAll('[data-revoke]')) {
     }
   });
 }
+
+const deleteForm = document.getElementById('video-delete');
+if (deleteForm) {
+  deleteForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!window.confirm('Удалить видео? Просмотр будет закрыт сразу. Восстановить файлы после удаления нельзя.')) return;
+    const button = deleteForm.querySelector('[type=submit]');
+    button.disabled = true;
+    try {
+      await videoRequest(`/api/videos/${deleteForm.dataset.videoId}`, 'DELETE');
+      window.location.assign('/studio');
+    } catch (failure) {
+      deleteForm.querySelector('[data-error]').textContent = failure instanceof TypeError ? 'Ошибка соединения. Повторите попытку.' : failure.message;
+      button.disabled = false;
+    }
+  });
+}

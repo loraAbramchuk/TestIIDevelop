@@ -167,11 +167,13 @@ def build_contract():
             op["responses"]["200"] = {
                 "description": "Файл после проверки доступа; Cache-Control: private, no-store"
             }
+            op["responses"]["503"] = json_response("ContractError", "Файл временно недоступен")
+            op["responses"]["304"] = {"description": "Условный запрос после ACL; без тела"}
             if method == "get":
                 op["responses"]["200"]["content"] = {
                     mime: {"schema": {"type": "string", "format": "binary"}}
                 }
-            if suffix == "stream":
+            if suffix in ("stream", "thumbnail"):
                 op["parameters"] = [
                     {
                         "name": "Range",
@@ -212,12 +214,12 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 4 processing, planned playback",
-            "version": "0.4.0",
+            "title": "Video API contracts — stage 5 protected playback and deletion",
+            "version": "0.5.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
-                "только рабочие маршруты. Stream/thumbnail и удаление "
-                "остаются проектными. Secure cookie называется __Host-video_session."
+                "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "
+                "Secure cookie называется __Host-video_session."
             ),
         },
         "paths": paths,

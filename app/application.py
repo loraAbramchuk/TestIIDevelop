@@ -95,7 +95,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def response_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        if request.url.path.startswith(("/api/videos", "/api/studio/videos", "/studio", "/upload")):
+        if request.url.path.startswith(
+            ("/api/videos", "/api/studio/videos", "/studio", "/upload", "/watch/")
+        ):
             response.headers["Cache-Control"] = "private, no-store"
             response.headers.append("Vary", "Cookie")
         elif request.url.path.startswith("/api/auth") or request.url.path in (

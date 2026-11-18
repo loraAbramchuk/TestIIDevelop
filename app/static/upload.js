@@ -8,6 +8,7 @@ if (uploadForm) {
   const status = uploadForm.querySelector('#upload-status');
   const error = uploadForm.querySelector('[data-error]');
   const manage = uploadForm.querySelector('#upload-manage');
+  const watch = uploadForm.querySelector('#upload-watch');
   const fields = [...uploadForm.querySelectorAll('[name=title], [name=description], [name=visibility]')];
   const cardStatus = document.getElementById('video-status');
   const cardNote = document.getElementById('video-processing-note');
@@ -38,6 +39,11 @@ if (uploadForm) {
     };
     status.textContent = messages[video.processing_status] || 'Обновите страницу, чтобы проверить статус.';
     reportError(video.processing_status === 'failed' ? processingFailureMessage(video.error_code) : '');
+    const canWatch = video.processing_status === 'ready' && video.moderation_status === 'visible';
+    watch.href = `/watch/${uploadForm.dataset.videoId}`;
+    watch.hidden = !canWatch;
+    const cardWatch = document.getElementById('video-watch');
+    if (cardWatch) cardWatch.hidden = !canWatch;
     if (cardStatus) {
       const labels = {uploading: 'Файл ещё не загружен', processing: 'Видео обрабатывается', ready: 'Видео готово', failed: 'Ошибка обработки'};
       cardStatus.textContent = labels[video.processing_status] || 'Статус неизвестен';
@@ -66,7 +72,7 @@ if (uploadForm) {
     });
   }
   if (cardStatus) {
-    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode});
+    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode, moderation_status: cardStatus.dataset.moderationStatus});
     if (accepted && cardStatus.dataset.processingState === 'processing') getWatcher().start();
   }
   window.addEventListener('pageshow', event => {

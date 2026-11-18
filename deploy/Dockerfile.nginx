@@ -1,0 +1,7 @@
+FROM nginx:1.28-alpine
+
+# Match the app/worker UID to read their 0700 directories and 0600 files.
+# The media volume itself is mounted read-only; only internal locations expose outputs.
+RUN addgroup -g 10001 media \
+    && adduser -S -D -H -u 10001 -G media media \
+    && sed -i -E 's/^user[[:space:]]+nginx;/user media;/' /etc/nginx/nginx.conf

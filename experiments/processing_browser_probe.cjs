@@ -51,7 +51,7 @@ const fs=require('node:fs');
   const view=await viewResponse.json();
   assert.equal(view.width,320);assert.equal(view.height,180);assert.ok(view.duration_seconds>1.9);
   assert.equal((await guest.request.get(base+`/api/videos/${first}`)).status(),404);
-  assert.equal((await context.request.get(base+`/api/videos/${first}/stream`)).status(),404);
+  assert.equal((await context.request.get(base+`/api/videos/${first}/stream`)).status(),200);
   await page.screenshot({path:'/tmp/stage4-ready-mobile.png',fullPage:true});
   const second=await upload(media+'/unsupported-10bit.mp4','Неподдерживаемый профиль');
   const failed=await waitStatus(second,'failed');
@@ -69,7 +69,7 @@ const fs=require('node:fs');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:'/tmp/stage4-studio-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  const report={browser:browser.version(),result:'passed',video_id:first,retried_video_id:second,checks:['real upload and automatic ready status','metadata extracted','private metadata protected','playback still planned stage 5','10-bit automatically shows actionable error','failed form permits retry','same card retry reaches ready','studio persists ready','mobile layout','no JS errors']};
+  const report={browser:browser.version(),result:'passed',video_id:first,retried_video_id:second,checks:['real upload and automatic ready status','metadata extracted','private metadata protected','protected stream available','10-bit automatically shows actionable error','failed form permits retry','same card retry reaches ready','studio persists ready','mobile layout','no JS errors']};
   fs.writeFileSync('/tmp/stage4-browser.json',JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report));
  }finally{await browser.close()}
