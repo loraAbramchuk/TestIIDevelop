@@ -61,3 +61,7 @@ button.danger { background: #a51b31; }
 .comment-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
 .comment-meta time { font-size: .85rem; color: #5b6579; }
 #comments-more { margin-top: 1rem; }
+.playlist-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.playlist-actions button { font-size: .9rem; }
+#playlist, .playlist-summary { overflow-wrap: anywhere; }
+#playlist-more { margin-top: 1rem; }

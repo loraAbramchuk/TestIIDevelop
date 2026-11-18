@@ -24,5 +24,10 @@
   </section>
   <h2>Видео канала</h2>
   {% if page['items'] %}{% include "video_grid.html" %}{% else %}<p>Здесь пока нет доступных видео.</p>{% endif %}
-  {% if page.next_cursor %}<p><a class="next-page" href="/channels/{{ channel.id }}?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a></p>{% endif %}
+  {% if page.next_cursor %}<p><a class="next-page" href="/channels/{{ channel.id }}?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}{% if playlist_cursor %}&amp;playlist_cursor={{ playlist_cursor|urlencode }}{% endif %}&amp;playlist_limit={{ playlist_limit }}">Следующая страница</a></p>{% endif %}
+  <section aria-label="Плейлисты канала"><h2>Плейлисты</h2>
+    {% if user and user.id == channel.owner_id %}<p><a href="/my-playlists">Управление плейлистами</a></p>{% endif %}
+    {% include "playlist_list.html" %}
+    {% if playlist_page.next_cursor %}<p><a href="/channels/{{ channel.id }}?playlist_limit={{ playlist_limit }}&amp;playlist_cursor={{ playlist_page.next_cursor|urlencode }}&amp;limit={{ limit }}{% if video_cursor %}&amp;cursor={{ video_cursor|urlencode }}{% endif %}">Ещё плейлисты</a></p>{% endif %}
+  </section>
 {% endblock %}

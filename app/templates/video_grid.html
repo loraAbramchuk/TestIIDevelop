@@ -1,11 +1,12 @@
 <section class="video-grid" aria-label="Видео">
   {% for video in page['items'] %}
-    <article class="video-card">
+    <article class="video-card" data-video-id="{{ video.id }}">
       <a class="card-preview" href="/watch/{{ video.id }}"><img src="{{ video.thumbnail_url }}" alt="Превью: {{ video.title }}" loading="lazy"></a>
       <div class="card-body">
         <h2><a href="/watch/{{ video.id }}">{{ video.title }}</a></h2>
         <a data-channel-label data-channel-id="{{ video.author.id }}" href="/channels/{{ video.author.id }}">{{ video.author.name }}</a>
         <p class="hint">{{ video.duration_seconds|round(1) }} с{% if video.visibility == 'private' %} · Приватное видео{% endif %}</p>
+        {% if playlist_manage|default(false) %}<div class="playlist-actions"><button type="button" data-move-up>Выше</button><button type="button" data-move-down>Ниже</button><button type="button" class="secondary" data-remove-video>Убрать из плейлиста</button></div>{% endif %}
       </div>
     </article>
   {% endfor %}

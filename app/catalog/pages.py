@@ -10,6 +10,7 @@ from app.catalog.schemas import CatalogPage
 from app.channels import service as channels
 from app.errors import DomainError
 from app.navigation import login_redirect
+from app.playlists import service as playlists
 from app.templating import templates
 from app.videos.pages import PageUser
 from app.videos.router import PageCursor, PageLimit
@@ -81,6 +82,8 @@ def channel_page(
     user: PageUser,
     limit: PageLimit = 20,
     cursor: PageCursor = None,
+    playlist_limit: PageLimit = 20,
+    playlist_cursor: PageCursor = None,
 ):
     try:
         viewer = user.id if user else None
@@ -95,6 +98,12 @@ def channel_page(
             channel=channels.profile(db, channel_id, viewer),
             page=page,
             limit=limit,
+            video_cursor=cursor,
+            playlist_page=playlists.list_playlists(
+                db, channel.owner_id, viewer, playlist_limit, playlist_cursor
+            ),
+            playlist_limit=playlist_limit,
+            playlist_cursor=playlist_cursor,
         )
     except DomainError as error:
         return error_page(request, error, user)

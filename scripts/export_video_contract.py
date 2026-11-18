@@ -20,6 +20,14 @@ from app.channels.schemas import (
 )  # noqa: E402
 from app.interactions.router import router as interaction_router  # noqa: E402
 from app.interactions.schemas import CommentCreate, CommentPage, CommentView, LikeState  # noqa: E402
+from app.playlists.router import router as playlist_router  # noqa: E402
+from app.playlists.schemas import (
+    PlaylistList,
+    PlaylistMove,
+    PlaylistTitle,
+    PlaylistVideos,
+    PlaylistView,
+)  # noqa: E402
 from app.uploads.router import router as upload_router  # noqa: E402
 from app.videos.router import router as video_router  # noqa: E402
 
@@ -94,6 +102,11 @@ def build_contract():
         CommentCreate,
         CommentView,
         CommentPage,
+        PlaylistTitle,
+        PlaylistMove,
+        PlaylistView,
+        PlaylistList,
+        PlaylistVideos,
     ):
         schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(schema.pop("$defs", {}))
@@ -269,6 +282,64 @@ def build_contract():
             "Удалить свой комментарий к доступному видео", mutation=True, status=204
         )
     }
+    paths["/api/playlists"] = {
+        "get": operation("Свои плейлисты с доступными счётчиками", output="PlaylistList"),
+        "post": operation(
+            "Создать публичный плейлист",
+            output="PlaylistView",
+            body="PlaylistTitle",
+            mutation=True,
+            status=201,
+        ),
+    }
+    paths["/api/playlists"]["get"]["parameters"] = pagination
+    paths["/api/playlists/{playlist_id}"] = {
+        "get": operation(
+            "Публичный плейлист с ACL-счётчиком", output="PlaylistView", authenticated=False
+        ),
+        "patch": operation(
+            "Переименовать свой плейлист",
+            output="PlaylistView",
+            body="PlaylistTitle",
+            mutation=True,
+        ),
+        "delete": operation("Удалить свой плейлист, сохранив видео", mutation=True, status=204),
+    }
+    paths["/api/playlists/{playlist_id}/items"] = {
+        "get": operation(
+            "Доступные видео в порядке плейлиста", output="PlaylistVideos", authenticated=False
+        )
+    }
+    paths["/api/playlists/{playlist_id}/items"]["get"]["parameters"] = pagination
+    paths["/api/playlists/{playlist_id}/unavailable-items"] = {
+        "delete": operation(
+            "Убрать недоступные элементы из своего плейлиста без раскрытия их данных",
+            mutation=True,
+            status=204,
+        )
+    }
+    paths["/api/playlists/{playlist_id}/items/{video_id}"] = {
+        "put": operation("Идемпотентно добавить доступное видео", mutation=True, status=204),
+        "delete": operation(
+            "Идемпотентно убрать видео из своего плейлиста", mutation=True, status=204
+        ),
+    }
+    paths["/api/playlists/{playlist_id}/items/{video_id}/position"] = {
+        "put": operation(
+            "Переместить видео перед другим или в конец",
+            body="PlaylistMove",
+            mutation=True,
+            status=204,
+        )
+    }
+    paths["/api/channels/{channel_id}/playlists"] = {
+        "get": operation(
+            "Публичные плейлисты канала с ACL-счётчиками",
+            output="PlaylistList",
+            authenticated=False,
+        )
+    }
+    paths["/api/channels/{channel_id}/playlists"]["get"]["parameters"] = pagination
     implemented = {
         (route.path, method.lower())
         for router in (
@@ -277,6 +348,7 @@ def build_contract():
             catalog_router,
             channel_router,
             interaction_router,
+            playlist_router,
         )
         for route in router.routes
         for method in route.methods
@@ -292,7 +364,7 @@ def build_contract():
                 "required": True,
                 "schema": {"type": "string", "format": "uuid"},
             }
-            for name in ("video_id", "user_id", "channel_id", "comment_id")
+            for name in ("video_id", "user_id", "channel_id", "comment_id", "playlist_id")
             if "{" + name + "}" in path
         ]
         if params:
@@ -300,8 +372,8 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 7 likes and comments",
-            "version": "0.7.0",
+            "title": "Video API contracts — stage 8 public playlists",
+            "version": "0.8.1",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
                 "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "

@@ -295,3 +295,59 @@ def test_admin_bootstrap_does_not_elevate_existing_user(auth_client, auth_app, m
         assert db.scalar(select(User).where(User.email == "existing@example.com")).role == "user"
     captured = capsys.readouterr()
     assert PASSWORD not in captured.out + captured.err
+
+
+@pytest.mark.parametrize("endpoint", ["register", "login"])
+@pytest.mark.parametrize("invalid", ["\ud800", "\udfff"])
+def test_password_with_invalid_unicode_is_422_without_exposing_secret(
+    auth_client, auth_app, endpoint, invalid
+):
+    email = f"{uuid.uuid4().hex}@example.com"
+    password = "private-password-prefix-" + invalid
+    payload = {"email": email, "password": password}
+    if endpoint == "register":
+        payload["display_name"] = "Valid name"
+    response = auth_client.post(
+        f"/api/auth/{endpoint}",
+        content=json.dumps(payload),
+        headers=csrf(auth_client) | {"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422
+    assert "private-password-prefix" not in response.text
+    assert all("input" not in item and "ctx" not in item for item in response.json()["detail"])
+    with auth_app.state.session_factory() as db:
+        assert db.scalar(select(User).where(User.email == email)) is None
+    if endpoint == "register":
+        assert register(auth_client, email=email).status_code == 201
+    else:
+        assert (
+            auth_client.post(
+                "/api/auth/login",
+                json={"email": email, "password": PASSWORD},
+                headers=csrf(auth_client),
+            ).status_code
+            == 401
+        )
+
+
+def test_password_unicode_nul_and_spaces_remain_unchanged(auth_client):
+    email = f"{uuid.uuid4().hex}@example.com"
+    password = "  Пароль 🎬 с пробелами\x00  "
+    assert register(auth_client, email=email, password=password).status_code == 201
+    assert auth_client.post("/api/auth/logout", headers=csrf(auth_client)).status_code == 204
+    assert (
+        auth_client.post(
+            "/api/auth/login",
+            json={"email": email, "password": password.strip()},
+            headers=csrf(auth_client),
+        ).status_code
+        == 401
+    )
+    assert (
+        auth_client.post(
+            "/api/auth/login",
+            json={"email": email, "password": password},
+            headers=csrf(auth_client),
+        ).status_code
+        == 200
+    )

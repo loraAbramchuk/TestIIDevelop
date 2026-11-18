@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
-from app.text_validation import validate_text
+from app.text_validation import validate_text, validate_unicode
 
 
 class LoginInput(BaseModel):
@@ -12,6 +12,12 @@ class LoginInput(BaseModel):
 
     email: EmailStr = Field(max_length=320)
     password: SecretStr = Field(min_length=1, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_unicode(cls, value):
+        validate_unicode(value.get_secret_value())
+        return value
 
     @field_validator("email", mode="before")
     @classmethod

@@ -22,6 +22,8 @@ from app.db import make_engine, make_session_factory  # noqa: E402
 from app.models import (
     AuthSession,
     Channel,
+    Comment,
+    Like,
     ProcessingRun,
     Subscription,
     UploadAttempt,
@@ -41,9 +43,9 @@ def migrate(*arguments):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", choices=("0006", "0007"), default="0006")
+    parser.add_argument("--baseline", choices=("0006", "0007", "0008"), default="0006")
     baseline = parser.parse_args().baseline
-    stage = "7" if baseline == "0007" else "6"
+    stage = {"0006": "6", "0007": "7", "0008": "8"}[baseline]
     settings = Settings()
     assert settings.postgres_db.endswith("_probe"), "Use a dedicated empty *_probe database"
     engine = make_engine(settings)
@@ -99,7 +101,7 @@ def main():
         db.add_all([owner, recipient])
         db.flush()
         owner_id, recipient_id = owner.id, recipient.id
-        if baseline == "0007":
+        if baseline in ("0007", "0008"):
             channel = Channel(
                 owner_id=owner_id, name=owner.display_name, description="Старый профиль"
             )
@@ -145,6 +147,9 @@ def main():
             )
         )
         db.add(VideoGrant(video_id=video_id, user_id=recipient_id, granted_by=owner_id))
+        if baseline == "0008":
+            db.add(Like(video_id=video_id, user_id=owner_id))
+            db.add(Comment(video_id=video_id, user_id=recipient_id, text="Прежний комментарий"))
         for user, token in zip((owner, recipient), tokens, strict=True):
             db.add(
                 AuthSession(
@@ -200,7 +205,7 @@ def main():
                     for key in (source_key, playback_key, thumbnail_key)
                 ],
             }
-            if baseline == "0007":
+            if baseline in ("0007", "0008"):
                 result["channels"] = [
                     (str(c.id), str(c.owner_id), c.name, c.description)
                     for c in db.scalars(select(Channel).order_by(Channel.id))
@@ -208,6 +213,15 @@ def main():
                 result["subscriptions"] = [
                     (str(s.subscriber_id), str(s.channel_id), s.created_at)
                     for s in db.scalars(select(Subscription))
+                ]
+            if baseline == "0008":
+                result["likes"] = [
+                    (str(r.video_id), str(r.user_id), r.created_at)
+                    for r in db.scalars(select(Like))
+                ]
+                result["comments"] = [
+                    (str(r.id), str(r.video_id), str(r.user_id), r.text, r.created_at)
+                    for r in db.scalars(select(Comment))
                 ]
             return result
 
@@ -257,6 +271,18 @@ def main():
             )
             assert client.get(likes_url).status_code == 404
             assert client.get(comments_url).status_code == 404
+        if baseline == "0008":
+            writer = recipient_headers | {"X-CSRF-Token": csrf_token(tokens[1])}
+            created = client.post(
+                "/api/playlists", headers=writer, json={"title": "Новый плейлист"}
+            )
+            assert created.status_code == 201
+            playlist_id = created.json()["id"]
+            path = f"/api/playlists/{playlist_id}"
+            assert client.put(path + f"/items/{video_id}", headers=writer).status_code == 204
+            assert client.get(path, headers=recipient_headers).json()["visible_count"] == 1
+            assert client.get(path).json()["visible_count"] == 0
+            assert client.get(path + "/items").json()["items"] == []
     migrate("check")
     migrate("downgrade", baseline)
     assert snapshot() == before
@@ -283,6 +309,28 @@ def main():
                 "channel profiles, IDs and subscriptions preserved",
                 "legacy session uses new interactions with private ACL",
                 "downgrade removes only new interaction data",
+            ]
+        )
+    if baseline == "0008":
+        with TestClient(create_app(settings)) as client:
+            assert client.get(path).status_code == 404
+            assert (
+                client.get(f"/api/videos/{video_id}/likes", headers=recipient_headers).json()[
+                    "like_count"
+                ]
+                == 1
+            )
+            assert (
+                client.get(f"/api/videos/{video_id}/comments", headers=recipient_headers).json()[
+                    "total_count"
+                ]
+                == 1
+            )
+        report["checks"].extend(
+            [
+                "channel IDs, profiles, subscriptions, likes and comments preserved",
+                "legacy session uses playlists without granting private access",
+                "downgrade removes only new playlist data",
             ]
         )
     Path(f"/tmp/stage{stage}-migration.json").write_text(json.dumps(report, indent=2) + "\n")

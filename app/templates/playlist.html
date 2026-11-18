@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ playlist.title }} — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/playlists.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <section id="playlist" data-playlist-id="{{ playlist.id }}" data-next-cursor="{{ page.next_cursor or '' }}" data-limit="{{ limit }}" data-can-manage="{{ 'true' if playlist.can_manage else 'false' }}" data-app-name="{{ app_name }}">
+    <h1 id="playlist-heading">{{ playlist.title }}</h1>
+    <p>Автор: <a href="/channels/{{ playlist.author.id }}">{{ playlist.author.name }}</a></p>
+    <p>Доступных видео: <span id="playlist-count">{{ page.visible_count }}</span></p>
+    <p class="hint">Плейлист публичный. Каждый посетитель видит только доступные ему видео.</p>
+    <p id="playlist-error" class="error" role="alert"></p><p id="playlist-success" class="success" role="status"></p>
+    <button id="playlist-refresh" type="button">Обновить плейлист</button>
+    <p id="playlist-gone-navigation" hidden><a href="/my-playlists">К моим плейлистам</a> · <a href="/">На главную</a></p>
+    {% if playlist.can_manage %}
+      <div id="playlist-management">
+        <section class="panel"><h2>Настройки плейлиста</h2><form id="playlist-rename"><label for="playlist-rename-title">Название плейлиста</label><input id="playlist-rename-title" name="title" value="{{ playlist.title }}" required maxlength="200"><button type="submit">Сохранить название</button></form></section>
+        <section class="panel"><h2>Добавить видео</h2><form id="playlist-add"><label for="playlist-video-link">Ссылка на видео</label><input id="playlist-video-link" name="url" required placeholder="Ссылка со страницы просмотра"><p class="hint">Скопируйте ссылку со страницы видео на этом сайте.</p><button type="submit">Добавить видео</button></form></section>
+        <section class="panel"><h2>Недоступные видео</h2><p>Можно убрать из плейлиста видео, к которым у вас сейчас нет доступа. Сами видео сохранятся. Если доступ восстановится, их нужно будет добавить снова.</p><button id="playlist-cleanup" class="secondary" type="button">Убрать недоступные видео</button></section>
+        <p><button id="playlist-delete" class="danger" type="button">Удалить плейлист</button></p>
+      </div>
+    {% endif %}
+    <div id="playlist-videos">{% set playlist_manage = playlist.can_manage %}{% include "video_grid.html" %}</div>
+    <p id="playlist-empty" {% if page['items'] %}hidden{% endif %}>В плейлисте пока нет доступных видео.</p>
+    <button id="playlist-more" type="button" {% if not page.next_cursor %}hidden{% endif %}>Ещё видео</button>
+    <noscript>{% if page.next_cursor %}<a href="/playlists/{{ playlist.id }}?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a>{% endif %} Для управления плейлистом включите JavaScript.</noscript>
+  </section>
+  <template id="playlist-card-template"><article class="video-card"><a class="card-preview"><img loading="lazy"></a><div class="card-body"><h2><a class="card-title"></a></h2><a class="card-author"></a><p class="hint"></p><div class="playlist-actions"><button type="button" data-move-up>Выше</button><button type="button" data-move-down>Ниже</button><button type="button" class="secondary" data-remove-video>Убрать из плейлиста</button></div></div></article></template>
+{% endblock %}
