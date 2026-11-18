@@ -23,6 +23,7 @@
           <a href="/subscriptions">Подписки</a>
           <a href="/my-playlists">Плейлисты</a>
           {% if user.role in ['moderator', 'admin'] %}<a href="/moderation">Модерация</a>{% endif %}
+          {% if user.role == "admin" %}<a href="/admin/users" data-admin-nav>Пользователи</a>{% endif %}
           <span class="account-name">{{ user.display_name }}</span>
           <button type="button" id="logout">Выйти</button>
         {% else %}

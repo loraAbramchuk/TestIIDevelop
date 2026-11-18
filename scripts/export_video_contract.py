@@ -8,6 +8,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import video_contracts as models  # noqa: E402
+from app.administration.router import router as admin_router  # noqa: E402
+from app.administration.schemas import (  # noqa: E402
+    AdminUser,
+    RoleChange,
+    RoleChangeResult,
+    UserPage,
+    UserProfile,
+)
 from app.catalog.router import router as catalog_router  # noqa: E402
 from app.catalog.schemas import CatalogPage, CatalogVideo  # noqa: E402
 from app.channels.router import router as channel_router  # noqa: E402
@@ -95,6 +103,11 @@ def operation(summary, *, output=None, body=None, mutation=False, authenticated=
 def build_contract():
     schemas = {}
     for model in (
+        AdminUser,
+        UserPage,
+        UserProfile,
+        RoleChange,
+        RoleChangeResult,
         models.VideoCreate,
         models.VideoPatch,
         models.VideoOwnerStatus,
@@ -420,9 +433,42 @@ def build_contract():
     paths["/api/moderation/audit"]["get"]["parameters"] = pagination + [
         {"name": "video_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}
     ]
+    paths["/api/admin/users"] = {
+        "get": operation("Поиск пользователей только для admin", output="UserPage")
+    }
+    paths["/api/admin/users"]["get"]["parameters"] = pagination + [
+        {"name": "q", "in": "query", "schema": {"type": "string", "maxLength": 200, "default": ""}},
+        {
+            "name": "role",
+            "in": "query",
+            "schema": {
+                "type": "string",
+                "enum": ["all", "user", "moderator", "admin"],
+                "default": "all",
+            },
+        },
+    ]
+    paths["/api/admin/users/{user_id}"] = {
+        "get": operation("Карточка пользователя и число администраторов", output="UserProfile")
+    }
+    paths["/api/admin/users/{user_id}/role"] = {
+        "patch": operation(
+            "Назначить роль с аудитом и защитой последнего администратора",
+            output="RoleChangeResult",
+            body="RoleChange",
+            mutation=True,
+        )
+    }
+    paths["/api/admin/audit"] = {
+        "get": operation("История назначения ролей только для admin", output="AuditPage")
+    }
+    paths["/api/admin/audit"]["get"]["parameters"] = pagination + [
+        {"name": "user_id", "in": "query", "schema": {"type": "string", "format": "uuid"}}
+    ]
     implemented = {
         (route.path, method.lower())
         for router in (
+            admin_router,
             video_router,
             upload_router,
             catalog_router,
@@ -460,8 +506,8 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 9 reports, moderation and audit",
-            "version": "0.9.0",
+            "title": "Video platform API contracts — stage 10 administration",
+            "version": "0.10.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
                 "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "

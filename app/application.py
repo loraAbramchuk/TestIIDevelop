@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.administration.pages import router as admin_pages
+from app.administration.router import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.auth_dependencies import optional_user
@@ -59,6 +61,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
+    app.include_router(admin_router)
+    app.include_router(admin_pages)
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(video_router)
@@ -113,7 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/subscriptions",
             "/my-playlists",
             "/moderation",
-        ) or request.url.path.startswith(("/channels/", "/playlists/", "/moderation/")):
+        ) or request.url.path.startswith(("/channels/", "/playlists/", "/moderation/", "/admin/")):
             return error_page(
                 request,
                 DomainError(
@@ -159,6 +163,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "/api/playlists",
                 "/playlists",
                 "/my-playlists",
+                "/api/admin",
+                "/admin/",
                 "/api/moderation",
                 "/moderation",
             )
