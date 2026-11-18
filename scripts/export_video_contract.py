@@ -8,6 +8,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import video_contracts as models  # noqa: E402
+from app.catalog.router import router as catalog_router  # noqa: E402
+from app.catalog.schemas import CatalogPage, CatalogVideo  # noqa: E402
+from app.channels.router import router as channel_router  # noqa: E402
+from app.channels.schemas import (
+    ChannelList,
+    ChannelPatch,
+    ChannelSummary,
+    ChannelView,
+    SubscriptionState,
+)  # noqa: E402
 from app.uploads.router import router as upload_router  # noqa: E402
 from app.videos.router import router as video_router  # noqa: E402
 
@@ -32,6 +42,7 @@ def operation(summary, *, output=None, body=None, mutation=False, authenticated=
         "404": json_response("ContractError", "Объект не найден или недоступен"),
         "409": json_response("ContractError", "Конфликт состояния"),
         "429": json_response("ContractError", "Лимит запросов; Retry-After в секундах"),
+        "503": json_response("ContractError", "Сервис временно недоступен"),
     }
     result = {
         "summary": summary,
@@ -70,6 +81,13 @@ def build_contract():
         models.GrantList,
         models.OwnedVideoList,
         models.ContractError,
+        CatalogPage,
+        CatalogVideo,
+        ChannelList,
+        ChannelPatch,
+        ChannelSummary,
+        ChannelView,
+        SubscriptionState,
     ):
         schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
         schemas.update(schema.pop("$defs", {}))
@@ -189,9 +207,42 @@ def build_contract():
                 }
             methods[method] = op
         paths[f"/api/videos/{{video_id}}/{suffix}"] = methods
+    paths["/api/videos"]["get"] = operation(
+        "Публичная лента и поиск только по доступным public-видео",
+        output="CatalogPage",
+        authenticated=False,
+    )
+    paths["/api/videos"]["get"]["parameters"] = pagination + [
+        {"name": "q", "in": "query", "schema": {"type": "string", "maxLength": 200}}
+    ]
+    paths["/api/channels/me"] = {"get": operation("Свой канал", output="ChannelView")}
+    paths["/api/channels/{channel_id}"] = {
+        "get": operation("Публичный профиль канала", output="ChannelView", authenticated=False),
+        "patch": operation(
+            "Редактировать свой канал", output="ChannelView", body="ChannelPatch", mutation=True
+        ),
+    }
+    paths["/api/channels/{channel_id}/videos"] = {
+        "get": operation(
+            "Видео канала с учётом ACL посетителя", output="CatalogPage", authenticated=False
+        )
+    }
+    paths["/api/channels/{channel_id}/videos"]["get"]["parameters"] = pagination
+    paths["/api/channels/{channel_id}/subscription"] = {
+        "put": operation(
+            "Идемпотентная подписка, кроме собственного канала",
+            output="SubscriptionState",
+            mutation=True,
+        ),
+        "delete": operation(
+            "Идемпотентная отмена подписки", output="SubscriptionState", mutation=True
+        ),
+    }
+    paths["/api/subscriptions"] = {"get": operation("Свои подписки", output="ChannelList")}
+    paths["/api/subscriptions"]["get"]["parameters"] = pagination
     implemented = {
         (route.path, method.lower())
-        for router in (video_router, upload_router)
+        for router in (video_router, upload_router, catalog_router, channel_router)
         for route in router.routes
         for method in route.methods
     }
@@ -206,7 +257,7 @@ def build_contract():
                 "required": True,
                 "schema": {"type": "string", "format": "uuid"},
             }
-            for name in ("video_id", "user_id")
+            for name in ("video_id", "user_id", "channel_id")
             if "{" + name + "}" in path
         ]
         if params:
@@ -214,8 +265,8 @@ def build_contract():
     return {
         "openapi": "3.1.0",
         "info": {
-            "title": "Video API contracts — stage 5 protected playback and deletion",
-            "version": "0.5.0",
+            "title": "Video API contracts — stage 6 catalog, channels and subscriptions",
+            "version": "0.6.0",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
                 "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "

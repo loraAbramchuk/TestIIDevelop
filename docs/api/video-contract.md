@@ -1,10 +1,11 @@
-# Контракт видео: этапы 1–5
+# Контракт видео: этапы 1–6
 
 Статус: реализованы метаданные, grants, передача исходника, обработка,
-защищённая раздача и удаление. Схемы находятся в
-`app/video_contracts.py`, машиночитаемый контракт — [video.openapi.json](video.openapi.json).
+защищённая раздача, удаление, каталог, каналы и подписки. Схемы находятся в
+`app/video_contracts.py`, `app/catalog/schemas.py`, `app/channels/schemas.py`;
+машиночитаемый контракт — [video.openapi.json](video.openapi.json).
 Поле x-implemented в JSON вычисляется по действующему router. `/docs` описывает
-только реализованные операции авторизации, health и videos.
+только реализованные операции авторизации, health, videos, catalog и channels.
 
 ## Общие правила
 
@@ -13,6 +14,8 @@
   статус обработки, ключ/путь файла или состояние модерации.
 - Название: 1–200 символов после обрезки пробелов. Описание: до 5000 символов,
   по умолчанию пустое. Видимость: public/private, по умолчанию private.
+- Текстовые метаданные, название/описание канала и имя при регистрации
+  отклоняют NUL и непарные суррогаты Unicode с 422 до сохранения в БД.
 - Для всех изменений обязательны сессионная cookie и X-CSRF-Token из auth API.
   Secure-режим использует __Host-video_session, локальный HTTP — video_session.
 - Неавторизованная обязательная операция — 401; ошибка CSRF — 403. Недоступное
@@ -50,6 +53,51 @@ moderation_status=visible, timestamps, nullable error_code/moderation_reason.
 на этапе 2. Только свои неудалённые карточки, включая неготовые и скрытые.
 Порядок created_at/id по убыванию, limit 1–100, items и nullable next_cursor.
 Курсор привязан к владельцу; чужой или некорректный курсор — 400.
+
+## Каталог, каналы и подписки
+
+| Метод | Endpoint | Ответ и доступ |
+| --- | --- | --- |
+| GET | `/api/videos?q=...&limit=20&cursor=...` | 200 CatalogPage; только публичная выдача |
+| GET | `/api/channels/me` | 200 ChannelView; канал текущего пользователя, иначе 401 |
+| GET | `/api/channels/{channel_id}` | 200 ChannelView; публичный профиль |
+| PATCH | `/api/channels/{channel_id}` | 200 ChannelView; только владелец, иначе 404 |
+| GET | `/api/channels/{channel_id}/videos` | 200 CatalogPage; готовые видео с ACL посетителя |
+| PUT | `/api/channels/{channel_id}/subscription` | 200 SubscriptionState; подписаться, сессия и CSRF |
+| DELETE | `/api/channels/{channel_id}/subscription` | 200 SubscriptionState; отменить, сессия и CSRF |
+| GET | `/api/subscriptions` | 200 ChannelList; только свои подписки, иначе 401 |
+
+CatalogPage и ChannelList содержат items и nullable next_cursor. CatalogVideo
+расширяет VideoView полем author: `{id, owner_id, name}` канала.
+ChannelView содержит id, owner_id, name, description, created_at, updated_at,
+subscriber_count и is_subscribed (для гостя false). Email и список подписчиков
+не публикуются. SubscriptionState: channel_id, is_subscribed, subscriber_count.
+Для неизвестного канала — 404 channel_not_found.
+
+Публичная выдача включает только public + ready + visible + отсутствие удаления,
+даже для владельца или получателя grant. q — до 200 символов, внешние пробелы
+обрезаются, поиск по части названия без учёта регистра. `%`, `_`, `/` и `\`
+не превращаются в шаблоны SQL; NUL отклоняется с 400 invalid_query.
+Пустой q в API означает публичную ленту; HTML `/search` показывает приглашение
+ввести название. Выдача канала использует общую политику public/владелец/grant,
+без привилегий moderator/admin и без расширения доступа по подписке.
+
+Все три списка принимают limit 1–100 (20 по умолчанию), cursor до 1024 символов.
+Видео сортируются по created_at/id по убыванию; подписки — по времени подписки
+и channel_id. Курсор публичной выдачи привязан к обрезанному q, канала — к каналу
+и посетителю, списка подписок — к пользователю. Чужой контекст или повреждённый
+курсор — 400 invalid_cursor. Каждый запрос заново проверяет доступ.
+
+PATCH принимает name (1–100 символов после trim) и description (до 2000).
+Пропущенные поля не меняются, `{}` допустим; null, NUL и неизвестные поля — 422.
+Повтор подписки/отмены идемпотентен; уникальная пара исключает дубли при гонках.
+Самоподписка — 409 self_subscription. PUT/DELETE возвращают JSON-состояние,
+в том числе при повторе отмены. Изменения профиля и подписок имеют отдельный
+общий счётчик каналов: VIDEO_WRITE_LIMIT_PER_MINUTE на пользователя; 429 с Retry-After.
+
+Ответы каталога/каналов и HTML используют no-store и Vary: Cookie.
+Недоступность БД — 503 service_unavailable с безопасным сообщением; HTML
+получает страницу ошибки. Некорректные параметры HTML-каталога — страница 422.
 
 ## Передача файла
 

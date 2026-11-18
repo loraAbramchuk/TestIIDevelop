@@ -6,10 +6,10 @@ import getpass
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from app.accounts import add_user_with_channel
 from app.auth_schemas import RegisterInput
 from app.config import Settings
 from app.db import make_engine, make_session_factory
-from app.models import User
 from app.security import hash_password
 
 
@@ -31,15 +31,14 @@ def main():
     engine = make_engine(Settings())
     try:
         with make_session_factory(engine)() as db:
-            db.add(
-                User(
+            try:
+                add_user_with_channel(
+                    db,
                     email=str(data.email),
                     display_name=data.display_name,
                     password_hash=hash_password(data.password.get_secret_value()),
                     role="admin",
                 )
-            )
-            try:
                 db.commit()
             except IntegrityError:
                 db.rollback()

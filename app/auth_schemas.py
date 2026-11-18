@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
+from app.text_validation import validate_text
+
 
 class LoginInput(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
@@ -24,6 +26,7 @@ class RegisterInput(LoginInput):
     @field_validator("display_name", mode="before")
     @classmethod
     def trim_name(cls, value):
+        value = validate_text(value)
         return value.strip() if isinstance(value, str) else value
 
 

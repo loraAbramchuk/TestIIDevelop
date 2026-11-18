@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script>{% endblock %}
 {% block content %}
   <h1>Видео</h1>
+  {% if page['items'] %}{% include "video_grid.html" %}{% else %}
   <section class="empty" aria-labelledby="empty-title">
     <div class="play" aria-hidden="true">▶</div>
     <h2 id="empty-title">Пока нет видео</h2>
     <p>Здесь появятся новые видео авторов.</p>
   </section>
+  {% endif %}
+  {% if page.next_cursor %}<p><a class="next-page" href="/?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a></p>{% endif %}
 {% endblock %}

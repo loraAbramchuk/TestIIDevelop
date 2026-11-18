@@ -6,13 +6,20 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.auth_dependencies import optional_user
+from app.catalog.pages import error_page
+from app.catalog.pages import router as catalog_pages
+from app.catalog.router import router as catalog_router
+from app.channels.router import router as channel_router
 from app.config import Settings
 from app.db import make_engine, make_session_factory
+from app.errors import DomainError
 from app.models import User
+from app.navigation import local_return_path
 from app.storage_health import initialize_storage
 from app.templating import PACKAGE_ROOT, templates
 from app.uploads.router import router as upload_router
@@ -52,6 +59,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(video_router)
     app.include_router(upload_router)
     app.include_router(video_pages)
+    app.include_router(catalog_router)
+    app.include_router(channel_router)
+    app.include_router(catalog_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
     @app.get("/docs", include_in_schema=False)
@@ -87,16 +97,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError):
+        if request.url.path in ("/", "/search", "/subscriptions") or request.url.path.startswith(
+            "/channels/"
+        ):
+            return error_page(
+                request,
+                DomainError(
+                    422,
+                    "invalid_request",
+                    "Проверьте ссылку и параметры страницы или сократите поисковый запрос.",
+                ),
+            )
         # Never echo passwords/other invalid input in validation errors.
         errors = [{"loc": e["loc"], "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": errors})
+
+    @app.exception_handler(SQLAlchemyError)
+    async def database_error(request: Request, exc: SQLAlchemyError):
+        error = DomainError(
+            503, "service_unavailable", "Сервис временно недоступен. Попробуйте позже."
+        )
+        if not request.url.path.startswith("/api/"):
+            return error_page(request, error)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": error.message, "code": error.code},
+            headers={"Cache-Control": "private, no-store"},
+        )
 
     @app.middleware("http")
     async def response_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         if request.url.path.startswith(
-            ("/api/videos", "/api/studio/videos", "/studio", "/upload", "/watch/")
+            (
+                "/api/videos",
+                "/api/studio/videos",
+                "/studio",
+                "/upload",
+                "/watch/",
+                "/api/channels",
+                "/api/subscriptions",
+                "/channels",
+                "/subscriptions",
+                "/my-channel",
+                "/search",
+            )
         ):
             response.headers["Cache-Control"] = "private, no-store"
             response.headers.append("Vary", "Cookie")
@@ -109,17 +155,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response.headers.append("Vary", "Cookie")
         return response
 
-    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def home(request: Request, user: Annotated[User | None, Depends(optional_user)]):
-        return templates.TemplateResponse(
-            request=request, name="home.html", context={"app_name": settings.app_name, "user": user}
-        )
-
     @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/register", response_class=HTMLResponse, include_in_schema=False)
     def auth_page(request: Request, user: Annotated[User | None, Depends(optional_user)]):
+        next_path = local_return_path(request.query_params.get("next"))
         if user:
-            return RedirectResponse("/", status_code=303)
+            return RedirectResponse(next_path, status_code=303)
         return templates.TemplateResponse(
             request=request,
             name="auth.html",
@@ -127,6 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "app_name": settings.app_name,
                 "user": None,
                 "register": request.url.path == "/register",
+                "next_path": next_path,
             },
         )
 

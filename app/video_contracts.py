@@ -1,4 +1,4 @@
-"""Video contracts. Metadata/ACL/upload/processing are implemented; playback remains planned."""
+"""Contracts for video metadata, ACL, uploads, processing and playback."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
+
+from app.text_validation import validate_text
 
 
 def omit_default(schema):
@@ -37,10 +39,11 @@ class VideoCreate(BaseModel):
     description: str = Field(default="", max_length=5000)
     visibility: Visibility = Visibility.PRIVATE
 
-    @field_validator("title", mode="before")
+    @field_validator("title", "description", mode="before")
     @classmethod
-    def trim_title(cls, value):
-        return value.strip() if isinstance(value, str) else value
+    def validate_metadata(cls, value, info):
+        value = validate_text(value)
+        return value.strip() if isinstance(value, str) and info.field_name == "title" else value
 
 
 class VideoPatch(BaseModel):
@@ -64,10 +67,11 @@ class VideoPatch(BaseModel):
             raise ValueError("Omit an unchanged field instead of sending null")
         return value
 
-    @field_validator("title", mode="before")
+    @field_validator("title", "description", mode="before")
     @classmethod
-    def trim_title(cls, value):
-        return value.strip() if isinstance(value, str) else value
+    def validate_metadata(cls, value, info):
+        value = validate_text(value)
+        return value.strip() if isinstance(value, str) and info.field_name == "title" else value
 
 
 class VideoOwnerStatus(BaseModel):

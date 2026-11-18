@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
+from app.accounts import add_user_with_channel
 from app.auth_dependencies import (
     CurrentSession,
     CurrentUser,
@@ -90,15 +91,14 @@ def register(
     rate_limit(db, f"register:{peer(request)}", 5, 3600)
     if session.user_id:
         raise HTTPException(409, "Сначала выйдите из текущего аккаунта")
-    user = User(
-        email=str(payload.email),
-        display_name=payload.display_name,
-        password_hash=hash_password(payload.password.get_secret_value()),
-        role="user",
-    )
-    db.add(user)
     try:
-        db.flush()
+        user = add_user_with_channel(
+            db,
+            email=str(payload.email),
+            display_name=payload.display_name,
+            password_hash=hash_password(payload.password.get_secret_value()),
+            role="user",
+        )
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Не удалось зарегистрироваться с этим email") from None

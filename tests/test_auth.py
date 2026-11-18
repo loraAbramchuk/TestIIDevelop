@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -148,6 +149,20 @@ def test_invalid_registration_never_echoes_password(auth_client, changes):
     assert response.status_code == 422
     assert PASSWORD not in response.text and "xY!7" not in response.text
     assert all("input" not in error and "ctx" not in error for error in response.json()["detail"])
+
+
+@pytest.mark.parametrize("name", ["A\x00B", "A\ud800B", "A\udfffB"])
+def test_invalid_unicode_registration_is_422_and_can_be_corrected(auth_client, auth_app, name):
+    email = f"{uuid.uuid4().hex}@example.com"
+    headers = csrf(auth_client) | {"Content-Type": "application/json"}
+    payload = {"email": email, "password": PASSWORD, "display_name": name}
+    response = auth_client.post("/api/auth/register", content=json.dumps(payload), headers=headers)
+    assert response.status_code == 422
+    assert PASSWORD not in response.text
+    assert all("input" not in item and "ctx" not in item for item in response.json()["detail"])
+    with auth_app.state.session_factory() as db:
+        assert db.scalar(select(User).where(User.email == email)) is None
+    assert register(auth_client, email=email, display_name="Автор 🎬").status_code == 201
 
 
 def test_unique_email_case_insensitive(auth_client):
