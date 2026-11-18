@@ -538,3 +538,127 @@ def test_waiting_add_cannot_keep_revoked_video_access(playlists):
         finally:
             blocker.rollback()
     assert videos(c, playlist).json()["visible_count"] == 0
+
+
+def test_cleanup_is_owner_only_idempotent_and_preserves_videos_and_other_lists(playlists):
+    c = playlists
+    playlist = create(c)
+    other = create(c)
+    public, private = c.seed(), c.seed(visibility="private")
+    unavailable = [c.seed() for _ in range(5)]
+    actor, owner = c.actors["stranger"], c.actors["owner"]
+    with c.factory() as db:
+        db.add(VideoGrant(video_id=UUID(private), user_id=actor.id, granted_by=owner.id))
+        db.commit()
+    for video in [public, private] + unavailable:
+        assert add(c, playlist, video).status_code == 204
+    assert add(c, other, private).status_code == 204
+    old_cursor = videos(c, playlist, limit=1).json()["next_cursor"]
+    with c.factory() as db:
+        db.execute(delete(VideoGrant).where(VideoGrant.video_id == UUID(private)))
+        for video, state in zip(
+            unavailable, ["hidden", "deleted", "uploading", "processing", "failed"], strict=True
+        ):
+            row = db.get(Video, UUID(video))
+            if state == "hidden":
+                row.moderation_status = "hidden"
+            elif state == "deleted":
+                row.deleted_at = datetime.now(UTC)
+            else:
+                row.processing_status = state
+        db.add(Like(video_id=UUID(private), user_id=owner.id))
+        db.add(Comment(video_id=UUID(private), user_id=owner.id, text="Keep this"))
+        db.commit()
+    endpoint = f"/api/playlists/{playlist}/unavailable-items"
+    assert c.client.delete(endpoint).status_code == 401
+    assert c.client.delete(endpoint, headers={"Cookie": actor.headers["Cookie"]}).status_code == 403
+    for name in ("owner", "allowed", "moderator", "admin"):
+        assert c.client.delete(endpoint, headers=c.actors[name].headers).status_code == 404
+    response = c.client.delete(endpoint, headers=actor.headers)
+    assert response.status_code == 204 and response.content == b""
+    assert "no-store" in response.headers["cache-control"]
+    assert [v["id"] for v in videos(c, playlist).json()["items"]] == [public]
+    assert videos(c, playlist, cursor=old_cursor).status_code == 409
+    with c.factory() as db:
+        remaining = list(
+            db.scalars(select(PlaylistItem).where(PlaylistItem.playlist_id == UUID(playlist)))
+        )
+        assert len(remaining) == 1 and remaining[0].position == 0
+        assert db.get(PlaylistItem, (UUID(other), UUID(private))) is not None
+        assert db.get(Video, UUID(private)).visibility == "private"
+        assert db.get(Like, (UUID(private), owner.id)) is not None
+        assert (
+            db.scalar(select(Comment.text).where(Comment.video_id == UUID(private))) == "Keep this"
+        )
+        assert all(db.get(Video, UUID(identifier)) is not None for identifier in unavailable)
+    new = c.seed()
+    assert add(c, playlist, new).status_code == 204
+    cursor = videos(c, playlist, limit=1).json()["next_cursor"]
+    assert c.client.delete(endpoint, headers=actor.headers).status_code == 204
+    assert videos(c, playlist, cursor=cursor).status_code == 200
+
+
+def test_cleanup_releases_capacity_and_does_not_run_automatically(playlists):
+    c = playlists
+    c.app.state.settings.playlist_max_items = 1
+    playlist, first, second = create(c), c.seed(), c.seed()
+    assert add(c, playlist, first).status_code == 204
+    with c.factory() as db:
+        db.get(Video, UUID(first)).moderation_status = "hidden"
+        db.commit()
+    assert videos(c, playlist).json()["visible_count"] == 0
+    assert add(c, playlist, second).status_code == 409
+    response = c.client.delete(
+        f"/api/playlists/{playlist}/unavailable-items", headers=c.actors["stranger"].headers
+    )
+    assert response.status_code == 204 and response.content == b""
+    assert add(c, playlist, second).status_code == 204
+    assert [v["id"] for v in videos(c, playlist).json()["items"]] == [second]
+
+
+@pytest.mark.parametrize("access_after_wait", [True, False])
+def test_cleanup_rechecks_grants_after_real_video_lock_wait(playlists, access_after_wait):
+    import time
+
+    from sqlalchemy import text
+
+    c = playlists
+    playlist, video = create(c), UUID(c.seed(visibility="private"))
+    actor, owner = c.actors["stranger"], c.actors["owner"]
+    with c.factory() as db:
+        db.add(VideoGrant(video_id=video, user_id=actor.id, granted_by=owner.id))
+        db.commit()
+    assert add(c, playlist, video).status_code == 204
+    if access_after_wait:
+        with c.factory() as db:
+            db.execute(delete(VideoGrant).where(VideoGrant.video_id == video))
+            db.commit()
+    with c.factory() as blocker, ThreadPoolExecutor(max_workers=1) as pool:
+        blocker.scalar(select(Video).where(Video.id == video).with_for_update())
+        future = pool.submit(
+            c.client.delete, f"/api/playlists/{playlist}/unavailable-items", headers=actor.headers
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while True:
+                locked = blocker.scalar(
+                    text("""
+                    SELECT EXISTS (SELECT 1 FROM pg_locks w JOIN pg_locks h
+                    ON w.locktype=h.locktype AND w.transactionid=h.transactionid
+                    WHERE NOT w.granted AND h.granted AND h.pid=pg_backend_pid())
+                """)
+                )
+                if locked:
+                    break
+                assert time.monotonic() < deadline, "Cleanup did not wait on video lock"
+                time.sleep(0.01)
+            if access_after_wait:
+                blocker.add(VideoGrant(video_id=video, user_id=actor.id, granted_by=owner.id))
+            else:
+                blocker.execute(delete(VideoGrant).where(VideoGrant.video_id == video))
+            blocker.commit()
+            assert future.result(timeout=10).status_code == 204
+        finally:
+            blocker.rollback()
+    with c.factory() as db:
+        assert (db.get(PlaylistItem, (UUID(playlist), video)) is not None) == access_after_wait

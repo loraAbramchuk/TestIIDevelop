@@ -376,3 +376,34 @@ UUID/профили каналов, подписки, видео/grants, оче�
 и хеши реальных файлов. Старая сессия работает с новым плейлистом без расширения
 прав на его приватные элементы. Отчёт: /tmp/stage8-migration.json.
 Downgrade удаляет только новые плейлисты, но для сохранения их данных нужен backup.
+
+### Восстановления интерфейса после ревью этапа 8
+
+Для `playlist_recovery_browser_probe.cjs` нужен свежий отдельный проект
+`stage8-fixes` на localhost:8094, БД stage8_fixes и лимит **один элемент**.
+Соберите актуальные app/web; пароль отдельной БД задайте в STAGE8_FIXES_DB_PASSWORD.
+
+```bash
+POSTGRES_PASSWORD="$STAGE8_FIXES_DB_PASSWORD" POSTGRES_DB=stage8_fixes HTTP_PORT=8094 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=67108864 \
+MEDIA_CAPACITY_BYTES=536870912 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=262144 \
+UPLOAD_CLEANUP_INTERVAL_SECONDS=2 PROCESSING_LEASE_SECONDS=6 \
+PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 PLAYLIST_MAX_ITEMS=1 \
+docker compose -p stage8-fixes -f compose.yaml up --no-build --detach --wait
+
+PLAYLIST_RECOVERY_TEST_PROJECT=stage8-fixes node experiments/playlist_recovery_browser_probe.cjs
+```
+
+Сценарий создаёт один аккаунт и два настоящих видео. Проверяет чистое/изменённое
+поле названия после переименования в другой вкладке, подтверждённые записи при
+последующем GET 503, ручное перечитывание без повторного PUT, удаление списка
+в другой вкладке и отключение управления после 404. Для воспроизведения полного
+плейлиста недоступное видео скрывается SQL только внутри stage8-fixes-db-1.
+Проверяются отмена подтверждения очистки, явная очистка без раскрытия состава,
+освобождение лимита и сохранность самого видео. Некорректный Unicode в пароле
+проверяется через реальные HTTP auth endpoints: 422 без отражения пароля.
+
+Нужны те же Playwright/Chromium, Node.js, Docker CLI и образец
+/tmp/stage1-media/h264-aac.mp4. Повтор создаёт ещё один аккаунт; учитывайте лимит
+регистрации тестовой БД. Артефакты: /tmp/stage8-fixes-recovery.json,
+/tmp/stage8-fixes-confirmed-write.png, /tmp/stage8-fixes-cleanup-mobile.png.

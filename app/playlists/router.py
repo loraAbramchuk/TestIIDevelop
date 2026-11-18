@@ -98,3 +98,9 @@ def channel_lists(
 ):
     channel = get_channel(db, channel_id)
     return service.list_playlists(db, channel.owner_id, user.id if user else None, limit, cursor)
+
+
+@router.delete("/api/playlists/{playlist_id}/unavailable-items", status_code=204, responses=ERRORS)
+def remove_unavailable(playlist_id: UUID, request: Request, db: Db, user: Writer):
+    write_limit(db, request, user)
+    service.remove_unavailable(db, playlist_id, user.id)

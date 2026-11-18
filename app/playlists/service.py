@@ -245,3 +245,37 @@ def move_video(db, identifier, video_id, user_id, payload):
         reorder(db, rows)
         changed(playlist)
     db.commit()
+
+
+def remove_unavailable(db, identifier, user_id):
+    playlist = get_playlist(db, identifier, owner_id=user_id, lock="write")
+    rows = items(db, identifier)
+    if rows:
+        # Match the global video lock order used by add/move. Recheck ACL only
+        # after acquiring all locks: a waited-for grant must not be discarded.
+        list(
+            db.scalars(
+                select(Video.id)
+                .where(Video.id.in_([row.video_id for row in rows]))
+                .order_by(Video.id)
+                .with_for_update()
+            )
+        )
+        allowed = set(
+            db.scalars(
+                select(Video.id)
+                .join(PlaylistItem, PlaylistItem.video_id == Video.id)
+                .where(PlaylistItem.playlist_id == identifier, viewable_by(user_id))
+            )
+        )
+        remaining = []
+        for row in rows:
+            if row.video_id in allowed:
+                remaining.append(row)
+            else:
+                db.delete(row)
+        if len(remaining) != len(rows):
+            db.flush()
+            reorder(db, remaining)
+            changed(playlist)
+    db.commit()

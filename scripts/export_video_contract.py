@@ -311,6 +311,13 @@ def build_contract():
         )
     }
     paths["/api/playlists/{playlist_id}/items"]["get"]["parameters"] = pagination
+    paths["/api/playlists/{playlist_id}/unavailable-items"] = {
+        "delete": operation(
+            "Убрать недоступные элементы из своего плейлиста без раскрытия их данных",
+            mutation=True,
+            status=204,
+        )
+    }
     paths["/api/playlists/{playlist_id}/items/{video_id}"] = {
         "put": operation("Идемпотентно добавить доступное видео", mutation=True, status=204),
         "delete": operation(
@@ -366,7 +373,7 @@ def build_contract():
         "openapi": "3.1.0",
         "info": {
             "title": "Video API contracts — stage 8 public playlists",
-            "version": "0.8.0",
+            "version": "0.8.1",
             "description": (
                 "x-implemented отмечает реализованные операции; действующий /docs содержит "
                 "только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. "
