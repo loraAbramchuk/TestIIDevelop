@@ -20,6 +20,8 @@ from app.db import make_engine, make_session_factory
 from app.errors import DomainError
 from app.interactions.router import router as interaction_router
 from app.models import User
+from app.moderation.pages import router as moderation_pages
+from app.moderation.router import router as moderation_router
 from app.navigation import local_return_path
 from app.playlists.pages import router as playlist_pages
 from app.playlists.router import router as playlist_router
@@ -67,6 +69,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(interaction_router)
     app.include_router(playlist_router)
     app.include_router(playlist_pages)
+    app.include_router(moderation_router)
+    app.include_router(moderation_pages)
     app.include_router(catalog_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
@@ -108,7 +112,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/search",
             "/subscriptions",
             "/my-playlists",
-        ) or request.url.path.startswith(("/channels/", "/playlists/")):
+            "/moderation",
+        ) or request.url.path.startswith(("/channels/", "/playlists/", "/moderation/")):
             return error_page(
                 request,
                 DomainError(
@@ -154,6 +159,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "/api/playlists",
                 "/playlists",
                 "/my-playlists",
+                "/api/moderation",
+                "/moderation",
             )
         ):
             response.headers["Cache-Control"] = "private, no-store"

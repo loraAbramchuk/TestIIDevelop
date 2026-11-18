@@ -20,11 +20,15 @@ from app.application import create_app  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.db import make_engine, make_session_factory  # noqa: E402
 from app.models import (
+    AuditEvent,
     AuthSession,
     Channel,
     Comment,
     Like,
+    Playlist,
+    PlaylistItem,
     ProcessingRun,
+    Report,
     Subscription,
     UploadAttempt,
     User,
@@ -43,9 +47,9 @@ def migrate(*arguments):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", choices=("0006", "0007", "0008"), default="0006")
+    parser.add_argument("--baseline", choices=("0006", "0007", "0008", "0009"), default="0006")
     baseline = parser.parse_args().baseline
-    stage = {"0006": "6", "0007": "7", "0008": "8"}[baseline]
+    stage = {"0006": "6", "0007": "7", "0008": "8", "0009": "9"}[baseline]
     settings = Settings()
     assert settings.postgres_db.endswith("_probe"), "Use a dedicated empty *_probe database"
     engine = make_engine(settings)
@@ -101,7 +105,7 @@ def main():
         db.add_all([owner, recipient])
         db.flush()
         owner_id, recipient_id = owner.id, recipient.id
-        if baseline in ("0007", "0008"):
+        if baseline in ("0007", "0008", "0009"):
             channel = Channel(
                 owner_id=owner_id, name=owner.display_name, description="Старый профиль"
             )
@@ -147,9 +151,14 @@ def main():
             )
         )
         db.add(VideoGrant(video_id=video_id, user_id=recipient_id, granted_by=owner_id))
-        if baseline == "0008":
+        if baseline in ("0008", "0009"):
             db.add(Like(video_id=video_id, user_id=owner_id))
             db.add(Comment(video_id=video_id, user_id=recipient_id, text="Прежний комментарий"))
+        if baseline == "0009":
+            playlist = Playlist(owner_id=owner_id, title="Прежний плейлист")
+            db.add(playlist)
+            db.flush()
+            db.add(PlaylistItem(playlist_id=playlist.id, video_id=video_id, position=0))
         for user, token in zip((owner, recipient), tokens, strict=True):
             db.add(
                 AuthSession(
@@ -205,7 +214,7 @@ def main():
                     for key in (source_key, playback_key, thumbnail_key)
                 ],
             }
-            if baseline in ("0007", "0008"):
+            if baseline in ("0007", "0008", "0009"):
                 result["channels"] = [
                     (str(c.id), str(c.owner_id), c.name, c.description)
                     for c in db.scalars(select(Channel).order_by(Channel.id))
@@ -214,7 +223,7 @@ def main():
                     (str(s.subscriber_id), str(s.channel_id), s.created_at)
                     for s in db.scalars(select(Subscription))
                 ]
-            if baseline == "0008":
+            if baseline in ("0008", "0009"):
                 result["likes"] = [
                     (str(r.video_id), str(r.user_id), r.created_at)
                     for r in db.scalars(select(Like))
@@ -222,6 +231,22 @@ def main():
                 result["comments"] = [
                     (str(r.id), str(r.video_id), str(r.user_id), r.text, r.created_at)
                     for r in db.scalars(select(Comment))
+                ]
+            if baseline == "0009":
+                result["playlists"] = [
+                    (
+                        str(p.id),
+                        str(p.owner_id),
+                        p.title,
+                        str(p.revision),
+                        p.created_at,
+                        p.updated_at,
+                    )
+                    for p in db.scalars(select(Playlist).order_by(Playlist.id))
+                ]
+                result["playlist_items"] = [
+                    (str(p.playlist_id), str(p.video_id), p.position)
+                    for p in db.scalars(select(PlaylistItem))
                 ]
             return result
 
@@ -283,6 +308,53 @@ def main():
             assert client.get(path, headers=recipient_headers).json()["visible_count"] == 1
             assert client.get(path).json()["visible_count"] == 0
             assert client.get(path + "/items").json()["items"] == []
+        if baseline == "0009":
+            writer = recipient_headers | {"X-CSRF-Token": csrf_token(tokens[1])}
+            response = client.post(
+                f"/api/videos/{video_id}/reports",
+                headers=writer,
+                json={"reason": "other", "explanation": "После обновления"},
+            )
+            assert response.status_code == 201
+            identifier = response.json()["id"]
+            action = f"/api/moderation/videos/{video_id}/visibility"
+            assert (
+                client.post(
+                    action,
+                    headers=writer,
+                    json={
+                        "status": "hidden",
+                        "reason": "Проверка миграции",
+                    },
+                ).status_code
+                == 200
+            )
+            assert (
+                client.get(f"/api/videos/{video_id}/stream", headers=recipient_headers).status_code
+                == 404
+            )
+            assert (
+                client.post(
+                    action,
+                    headers=writer,
+                    json={
+                        "status": "visible",
+                        "reason": "Проверено",
+                    },
+                ).status_code
+                == 200
+            )
+            assert client.get(f"/api/videos/{video_id}/stream").status_code == 404
+            decision = client.post(
+                f"/api/moderation/reports/{identifier}/decision",
+                headers=writer,
+                json={"status": "resolved", "reason": "Рассмотрено"},
+            )
+            assert decision.status_code == 200
+            assert (
+                len(client.get("/api/moderation/audit", headers=recipient_headers).json()["items"])
+                == 3
+            )
     migrate("check")
     migrate("downgrade", baseline)
     assert snapshot() == before
@@ -331,6 +403,18 @@ def main():
                 "channel IDs, profiles, subscriptions, likes and comments preserved",
                 "legacy session uses playlists without granting private access",
                 "downgrade removes only new playlist data",
+            ]
+        )
+    if baseline == "0009":
+        with factory() as db:
+            assert list(db.scalars(select(Report))) == []
+            assert list(db.scalars(select(AuditEvent))) == []
+        report["checks"].extend(
+            [
+                "legacy channels/subscriptions/likes/comments/playlists/revisions/order preserved",
+                "legacy moderator session reports, hides, restores and decides with atomic audit",
+                "restoration does not make legacy private video public",
+                "downgrade drops reports/audit only; re-upgrade creates empty tables",
             ]
         )
     Path(f"/tmp/stage{stage}-migration.json").write_text(json.dumps(report, indent=2) + "\n")

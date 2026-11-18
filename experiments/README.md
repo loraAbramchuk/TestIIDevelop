@@ -407,3 +407,62 @@ PLAYLIST_RECOVERY_TEST_PROJECT=stage8-fixes node experiments/playlist_recovery_b
 /tmp/stage1-media/h264-aac.mp4. Повтор создаёт ещё один аккаунт; учитывайте лимит
 регистрации тестовой БД. Артефакты: /tmp/stage8-fixes-recovery.json,
 /tmp/stage8-fixes-confirmed-write.png, /tmp/stage8-fixes-cleanup-mobile.png.
+
+## Жалобы и модерация: этап 9
+
+Используйте свежий изолированный проект `stage9-verify` на localhost:8095,
+БД `stage9_verify`, актуальные app/web, Playwright/Chromium, Node.js, Docker CLI
+и образцы `/tmp/stage1-media/h264-aac.mp4` из проверки pipeline.
+Пароль отдельной БД задайте в STAGE9_TEST_POSTGRES_PASSWORD.
+
+```bash
+docker compose build app web
+POSTGRES_PASSWORD="$STAGE9_TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage9_verify HTTP_PORT=8095 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=67108864 \
+MEDIA_CAPACITY_BYTES=536870912 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=262144 \
+UPLOAD_CLEANUP_INTERVAL_SECONDS=2 PROCESSING_LEASE_SECONDS=6 \
+PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 \
+docker compose -p stage9-verify -f compose.yaml up --no-build --detach --wait
+
+MODERATION_TEST_PROJECT=stage9-verify node experiments/moderation_browser_probe.cjs
+DOCS_TEST_BASE_URL=http://127.0.0.1:8095 node experiments/docs_browser_probe.cjs
+PLAYBACK_TEST_BASE_URL=http://127.0.0.1:8095 node experiments/playback_browser_probe.cjs
+```
+
+Основной сценарий создаёт три настоящих аккаунта и два ролика через UI/worker.
+Отказывается работать без MODERATION_TEST_PROJECT=stage9-verify и loopback URL.
+Назначает и отзывает роль SQL **только** в `stage9-verify-db-1`/`stage9_verify`;
+скрытие, восстановление, жалобы и решения выполняет через рабочие UI/API.
+Проверяет запрет приватного просмотра/названия для сотрудника без grant, повтор
+открытой жалобы, 503 с сохранением черновика, закрытие/фильтр/пагинацию, причины
+и исполнителя в аудите, hidden на всех ролях/поверхностях, owner status/metadata,
+сохранение приватности, отзыв роли в открытом экране, HTML как текст и 320–1440 px.
+Отдельный playback-сценарий создаёт ещё два аккаунта: суммарно пять, в пределах
+лимита регистрации 5/IP/час. Повтор требует свежих изолированных данных или
+сброса лимита **только в тестовой базе**. Production не используйте.
+
+Артефакты: `/tmp/stage9-browser.json`, `/tmp/stage9-moderation-{390,1440}.png`, `/tmp/stage9-owner-{390,1440}.png`;
+Swagger выводит JSON в stdout и `/tmp/swagger-local.png`; регрессия плеера —
+`/tmp/stage5-browser.json` и `/tmp/stage5-watch-{desktop,mobile}.png`.
+
+Миграционная проба требует пустую отдельную БД с суффиксом `_probe`:
+
+```bash
+docker compose exec -T db createdb -U video stage9_moderation_probe
+POSTGRES_DB=stage9_moderation_probe uv run --locked python experiments/catalog_migration_probe.py --baseline 0009
+```
+
+Сравнивает данные этапа 8 до/после upgrade, повторного upgrade, downgrade и
+re-upgrade. Включает роли/сессии/каналы/подписки/видео/grants/очередь/uploads,
+лайки/комментарии, плейлисты/revision/порядок и хеши файлов. Старая moderator
+сессия создаёт жалобу, скрывает/восстанавливает и закрывает дело с тремя событиями
+аудита. Проверяет private ACL, alembic check и пустые reports/audit после
+re-upgrade. Отчёт: `/tmp/stage9-migration.json`. Downgrade теряет жалобы/историю,
+но сохраняет поля модерации videos; для сохранения данных необходим backup.
+
+После проверки остановите только тестовый проект, сохранив volumes:
+
+```bash
+POSTGRES_PASSWORD="$STAGE9_TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage9_verify HTTP_PORT=8095 \
+docker compose -p stage9-verify -f compose.yaml stop
+```

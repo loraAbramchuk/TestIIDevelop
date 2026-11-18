@@ -1,0 +1,12 @@
+<section id="moderation-video" class="panel" data-video-id="{{ video.id }}">
+  <h2>Видео</h2>
+  <p class="account-id">Идентификатор: {{ video.id }}</p>
+  <p id="moderation-video-title">{{ video.title or 'Название недоступно по текущим правам просмотра' }}</p>
+  <p>Приватность: <span id="moderation-privacy">{{ video.visibility }}</span></p>
+  <p>Обработка: <span id="moderation-processing">{{ video.processing_status }}</span></p>
+  <p>Модерация: <span id="moderation-state">{{ video.moderation_status }}</span></p>
+  <p id="moderation-current-reason" class="video-description">{{ video.moderation_reason or '' }}</p>
+  <p id="moderation-deleted" {% if not video.deleted %}hidden{% endif %}>Видео удалено владельцем. Восстановление через модерацию невозможно.</p>
+  <p><a id="moderation-watch" {% if video.watch_url %}href="{{ video.watch_url }}"{% else %}hidden{% endif %}>Открыть страницу просмотра</a></p>
+  <p class="hint">Жалоба и роль не предоставляют доступ к приватному видео. Скрытое видео не воспроизводится ни одной ролью.</p>
+</section>

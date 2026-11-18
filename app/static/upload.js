@@ -53,7 +53,14 @@ if (uploadForm) {
       cardStatus.textContent = labels[video.processing_status] || 'Статус неизвестен';
       cardStatus.dataset.processingState = video.processing_status;
       cardNote.hidden = video.processing_status !== 'processing';
-      cardCheck.hidden = video.processing_status !== 'processing';
+      cardCheck.hidden = false;
+      if (video.moderation_status) cardStatus.dataset.moderationStatus = video.moderation_status;
+      if ('moderation_reason' in video) cardStatus.dataset.moderationReason = video.moderation_reason || '';
+      const moderationReason = document.getElementById('video-moderation-reason');
+      if (moderationReason) {
+        moderationReason.hidden = cardStatus.dataset.moderationStatus !== 'hidden';
+        moderationReason.textContent = 'Скрыто модератором: ' + (cardStatus.dataset.moderationReason || 'Причина не указана');
+      }
       uploadPanel.hidden = accepted;
     }
     updateControls();
@@ -80,7 +87,7 @@ if (uploadForm) {
     });
   }
   if (cardStatus) {
-    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode, moderation_status: cardStatus.dataset.moderationStatus});
+    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode, moderation_status: cardStatus.dataset.moderationStatus, moderation_reason: cardStatus.dataset.moderationReason});
     if (accepted && cardStatus.dataset.processingState === 'processing') getWatcher().start();
   }
   window.addEventListener('pageshow', event => {

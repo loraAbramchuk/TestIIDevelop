@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Рассмотрение жалобы — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/moderation.js') }}" defer></script>{% endblock %}
+{% block content %}
+<p><a href="/moderation">К очереди жалоб</a> · <a href="/moderation/audit?video_id={{ report.video_id }}">История действий с видео</a></p>
+<h1>Рассмотрение жалобы</h1><p>Причина: {{ {'spam':'Спам','prohibited':'Запрещённый контент','copyright':'Нарушение прав','other':'Другое'}[report.reason] }}</p><p class="video-description">{{ report.explanation }}</p>
+<p class="account-id">Отправитель: {{ report.reporter_id }}</p><p>Статус: <span id="report-state">{{ report.status }}</span></p>
+<p id="report-decision" class="video-description">{{ report.decision_reason or '' }}</p><p id="report-decider" class="account-id">{% if report.decided_by %}Рассмотрел: {{ report.decided_by }}{% endif %}</p>
+{% set video=report.video %}{% include "moderation_video_summary.html" %}
+<p><a href="/moderation/videos/{{ report.video_id }}">Скрыть или восстановить видео</a></p>
+<p>Закрытие жалобы само по себе не скрывает и не восстанавливает видео.</p>
+<form id="report-decision-form" class="panel" data-report-id="{{ report.id }}" {% if report.status != 'open' %}hidden{% endif %}>
+<label for="decision-status">Решение</label><select id="decision-status" name="status"><option value="resolved">Решена</option><option value="dismissed">Отклонена</option></select>
+<label for="decision-reason">Причина решения</label><textarea id="decision-reason" name="reason" required maxlength="2000" rows="4"></textarea><button type="submit">Сохранить решение</button>
+</form><p id="moderation-error" class="error" role="alert"></p><p id="moderation-success" class="success" role="status"></p>
+{% endblock %}
