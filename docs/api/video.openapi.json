@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Video API contracts — stage 4 processing, planned playback",
-    "version": "0.4.0",
-    "description": "x-implemented отмечает реализованные операции; действующий /docs содержит только рабочие маршруты. Stream/thumbnail и удаление остаются проектными. Secure cookie называется __Host-video_session."
+    "title": "Video API contracts — stage 5 protected playback and deletion",
+    "version": "0.5.0",
+    "description": "x-implemented отмечает реализованные операции; действующий /docs содержит только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. Secure cookie называется __Host-video_session."
   },
   "paths": {
     "/api/studio/videos": {
@@ -376,9 +376,9 @@
       "delete": {
         "summary": "Запретить просмотр и запланировать очистку; повтор владельца для tombstone — 204",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "204": {
             "description": "Без тела"
@@ -1010,9 +1010,9 @@
       "get": {
         "summary": "Просмотр; каждый запрос проходит ACL",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Файл после проверки доступа; Cache-Control: private, no-store",
@@ -1075,6 +1075,19 @@
               }
             }
           },
+          "503": {
+            "description": "Файл временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Условный запрос после ACL; без тела"
+          },
           "206": {
             "description": "Диапазон, Content-Range и Accept-Ranges: bytes"
           },
@@ -1102,9 +1115,9 @@
       "head": {
         "summary": "Просмотр; каждый запрос проходит ACL",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Файл после проверки доступа; Cache-Control: private, no-store"
@@ -1159,6 +1172,19 @@
               }
             }
           },
+          "503": {
+            "description": "Файл временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Условный запрос после ACL; без тела"
+          },
           "206": {
             "description": "Диапазон, Content-Range и Accept-Ranges: bytes"
           },
@@ -1199,9 +1225,9 @@
       "get": {
         "summary": "Превью; каждый запрос проходит ACL",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Файл после проверки доступа; Cache-Control: private, no-store",
@@ -1263,6 +1289,25 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Файл временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Условный запрос после ACL; без тела"
+          },
+          "206": {
+            "description": "Диапазон, Content-Range и Accept-Ranges: bytes"
+          },
+          "416": {
+            "description": "Диапазон вне файла, Content-Range: bytes */size"
           }
         },
         "security": [
@@ -1270,14 +1315,24 @@
           {
             "SessionCookie": []
           }
+        ],
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "example": "bytes=0-1023"
+            }
+          }
         ]
       },
       "head": {
         "summary": "Превью; каждый запрос проходит ACL",
         "tags": [
-          "planned-video"
+          "videos"
         ],
-        "x-implemented": false,
+        "x-implemented": true,
         "responses": {
           "200": {
             "description": "Файл после проверки доступа; Cache-Control: private, no-store"
@@ -1331,12 +1386,41 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Файл временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Условный запрос после ACL; без тела"
+          },
+          "206": {
+            "description": "Диапазон, Content-Range и Accept-Ranges: bytes"
+          },
+          "416": {
+            "description": "Диапазон вне файла, Content-Range: bytes */size"
           }
         },
         "security": [
           {},
           {
             "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "example": "bytes=0-1023"
+            }
           }
         ]
       },

@@ -14,6 +14,26 @@ router = APIRouter(include_in_schema=False)
 PageUser = Annotated[User | None, Depends(optional_user)]
 
 
+@router.get("/watch/{video_id}", response_class=HTMLResponse)
+def watch_page(video_id: UUID, request: Request, db: Db, user: PageUser):
+    try:
+        video = service.visible_video(db, video_id, user.id if user else None)
+    except service.VideoError as error:
+        if error.status != 404:
+            raise
+        return templates.TemplateResponse(
+            request=request,
+            name="video_unavailable.html",
+            status_code=404,
+            context={"app_name": request.app.state.settings.app_name, "user": user},
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="watch.html",
+        context={"app_name": request.app.state.settings.app_name, "user": user, "video": video},
+    )
+
+
 @router.get("/studio", response_class=HTMLResponse)
 def studio(
     request: Request, db: Db, user: PageUser, limit: PageLimit = 20, cursor: PageCursor = None

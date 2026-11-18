@@ -165,3 +165,59 @@ DB_HOST/DB_PORT/POSTGRES_* задаются для этой тестовой Б�
 освобождение блокировки, дожидается настоящего срока аренды, выполняет maintenance
 --once, запускает новый worker и проверяет ready, исходник и итоговый ack.
 Тестовые БД/файлы остаются для осмотра. Результаты: [этап 4](../docs/verification/stage-4.md).
+
+## Защищённый просмотр и удаление: этап 5
+
+Нужен свежий отдельный Compose-контур `stage5-verify` на localhost:8089,
+БД stage5_verify и собранные app/web. Установлены FFmpeg, Python-зависимости
+разработки, Playwright и Chromium, как в предыдущих разделах. Пароль тестовой БД
+задайте отдельно в STAGE5_TEST_POSTGRES_PASSWORD. Не используйте рабочую БД.
+
+```bash
+docker compose build app web
+POSTGRES_PASSWORD="$STAGE5_TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage5_verify HTTP_PORT=8089 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=67108864 \
+MEDIA_CAPACITY_BYTES=536870912 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=262144 \
+UPLOAD_CLEANUP_INTERVAL_SECONDS=2 PROCESSING_LEASE_SECONDS=6 \
+PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 \
+docker compose -p stage5-verify -f compose.yaml up --no-build --detach --wait
+
+uv run --locked python experiments/playback_http_probe.py --project stage5-verify
+PLAYBACK_TEST_BASE_URL=http://127.0.0.1:8089 node experiments/playback_browser_probe.cjs
+DOCS_TEST_BASE_URL=http://127.0.0.1:8089 node experiments/docs_browser_probe.cjs
+```
+
+HTTP-проверка требует Docker CLI: останавливает только worker/maintenance и
+перезапускает app/web этого тестового проекта. Она проверяет точные байты Range,
+HEAD, 416, ACL, отзыв и смену приватности, сохранность после restart, удаление
+во время настоящего FFmpeg и восстановление очистки после запуска maintenance.
+Используется локальный psql внутри stage5-verify-db-1 для проверки служебного
+журнала и квот; схема/секреты основной БД не затрагиваются. Worker/maintenance
+восстанавливаются в finally. Отчёт — /tmp/stage5-http.json.
+
+Браузерный сценарий проверяет загрузку, появление ссылки просмотра, защищённый
+JPEG, native MP4-плеер, декодированные кадры, ход времени и перемотку, grants,
+отзыв, public/private и подтверждение удаления. Оба сценария создают по два
+аккаунта; для повторных прогонов учитывайте лимиты регистрации тестовой БД.
+JSON и снимки — /tmp/stage5-browser.json, /tmp/stage5-watch-{desktop,mobile}.png.
+Используется маленький двухсекундный MP4; HTTP-удаление проверяется также на
+100-секундном клипе. Нагрузка и максимальные файлы здесь не проверяются.
+
+Отдельный прогон регрессий восстановления загрузки и сохранности черновиков
+в карточке (на свежем stage5-verify, с теми же настройками выше):
+
+```bash
+RECOVERY_TEST_PROJECT=stage5-verify node experiments/upload_recovery_browser_probe.cjs
+```
+
+Сценарий создаёт три аккаунта, останавливает/запускает только тестовый worker и
+держит два настоящих receiving PUT, чтобы получить 429. Проверяет потерю ответа
+после реального 202, автоопрос до ready, сохранение причины отказа, повтор той
+же карточки, grant/revoke без reload и без потери названия/описания/видимости.
+Также проверяются идемпотентный grant, limit/cursor, ручное восстановление списка
+после имитированного 503 и сообщение имитированного 507 без заполнения диска.
+Нужны Docker CLI/psql в тестовом db, Playwright/Chromium и образец H.264/AAC.
+В finally тестовый worker запускается, открытые запросы закрываются.
+Три аккаунта входят в общий лимит регистрации вместе с основными проверками;
+для отдельного прогона нужен свежий тестовый контур.
+Артефакты: /tmp/stage5-recovery.json, /tmp/stage5-recovery-grants.png.

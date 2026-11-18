@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from app.auth_dependencies import CurrentUser, Db, optional_user
 from app.auth_protection import check_csrf, rate_limit
@@ -17,6 +17,8 @@ from app.video_contracts import (
     VideoView,
 )
 from app.videos import service
+from app.videos.deletion import delete_video
+from app.videos.delivery import media_response
 
 router = APIRouter(tags=["videos"])
 ERRORS = {code: {"model": ContractError} for code in (400, 401, 403, 404, 409, 429)}
@@ -45,8 +47,7 @@ def create(payload: VideoCreate, request: Request, db: Db, user: Writer):
     response_model=VideoView,
     responses=ERRORS,
     description=(
-        "Метаданные только готового доступного видео. "
-        "Stream и thumbnail будут реализованы на этапе 5."
+        "Метаданные только готового доступного видео. Файловые запросы проходят ту же ACL."
     ),
 )
 def view(video_id: UUID, db: Db, user: Viewer):
@@ -64,6 +65,59 @@ def patch(video_id: UUID, payload: VideoPatch, request: Request, db: Db, user: W
         db, f"videos:write:{user.id}", request.app.state.settings.video_write_limit_per_minute, 60
     )
     return service.patch_video(db, video_id, user.id, payload)
+
+
+@router.delete("/api/videos/{video_id}", status_code=204, responses=ERRORS)
+def delete_video_route(video_id: UUID, request: Request, db: Db, user: Writer):
+    rate_limit(
+        db, f"videos:write:{user.id}", request.app.state.settings.video_write_limit_per_minute, 60
+    )
+    delete_video(db, request.app.state.settings, video_id, user.id)
+
+
+def file_responses(mime, *, head=False):
+    responses = ERRORS | {
+        200: {
+            "description": "Файл после ACL",
+            "content": {mime: {"schema": {"type": "string", "format": "binary"}}},
+        },
+        206: {"description": "Диапазон байтов; Content-Range"},
+        304: {"description": "Условный запрос после проверки ACL; без тела"},
+        416: {"description": "Диапазон вне файла; Content-Range: bytes */size"},
+        503: {"model": ContractError, "description": "Файл временно недоступен"},
+    }
+    if head:
+        responses[200].pop("content")
+    return responses
+
+
+@router.get(
+    "/api/videos/{video_id}/stream", response_class=Response, responses=file_responses("video/mp4")
+)
+@router.head(
+    "/api/videos/{video_id}/stream",
+    response_class=Response,
+    responses=file_responses("video/mp4", head=True),
+)
+def stream(video_id: UUID, request: Request, db: Db, user: Viewer):
+    """Каждый GET/HEAD, включая Range, проходит ACL; байты раздаёт Nginx, кэш запрещён."""
+    return media_response(db, request.app.state.settings, video_id, user.id if user else None)
+
+
+@router.get(
+    "/api/videos/{video_id}/thumbnail",
+    response_class=Response,
+    responses=file_responses("image/jpeg"),
+)
+@router.head(
+    "/api/videos/{video_id}/thumbnail",
+    response_class=Response,
+    responses=file_responses("image/jpeg", head=True),
+)
+def thumbnail(video_id: UUID, request: Request, db: Db, user: Viewer):
+    return media_response(
+        db, request.app.state.settings, video_id, user.id if user else None, thumbnail=True
+    )
 
 
 @router.get("/api/videos/{video_id}/grants", response_model=GrantList, responses=ERRORS)

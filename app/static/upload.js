@@ -7,14 +7,16 @@ if (uploadForm) {
   const progress = uploadForm.querySelector('#upload-progress');
   const status = uploadForm.querySelector('#upload-status');
   const error = uploadForm.querySelector('[data-error]');
+  const processingError = uploadForm.querySelector('#upload-processing-error');
   const manage = uploadForm.querySelector('#upload-manage');
+  const watch = uploadForm.querySelector('#upload-watch');
   const fields = [...uploadForm.querySelectorAll('[name=title], [name=description], [name=visibility]')];
   const cardStatus = document.getElementById('video-status');
   const cardNote = document.getElementById('video-processing-note');
   const cardError = document.getElementById('video-processing-error');
   const cardCheck = document.getElementById('video-status-check');
   const uploadPanel = document.getElementById('video-upload-panel');
-  const reportError = message => { (cardError || error).textContent = message; };
+  const reportError = message => { (cardError || processingError).textContent = message; };
   let watcher = null;
   let xhr = null;
   let busy = false;
@@ -38,6 +40,14 @@ if (uploadForm) {
     };
     status.textContent = messages[video.processing_status] || 'Обновите страницу, чтобы проверить статус.';
     reportError(video.processing_status === 'failed' ? processingFailureMessage(video.error_code) : '');
+    // A status refresh must not erase the separate error of a rejected transfer.
+    // Only proof of acceptance supersedes an action/connection error.
+    if (accepted) { error.textContent = ''; progress.hidden = false; progress.value = 100; }
+    const canWatch = video.processing_status === 'ready' && video.moderation_status === 'visible';
+    watch.href = `/watch/${uploadForm.dataset.videoId}`;
+    watch.hidden = !canWatch;
+    const cardWatch = document.getElementById('video-watch');
+    if (cardWatch) cardWatch.hidden = !canWatch;
     if (cardStatus) {
       const labels = {uploading: 'Файл ещё не загружен', processing: 'Видео обрабатывается', ready: 'Видео готово', failed: 'Ошибка обработки'};
       cardStatus.textContent = labels[video.processing_status] || 'Статус неизвестен';
@@ -54,19 +64,23 @@ if (uploadForm) {
     }
     return watcher;
   }
-  async function refreshStatus() { return await getWatcher()?.refresh(); }
+  async function refreshStatus() {
+    const video = await getWatcher()?.refresh();
+    // Reconciliation after a lost response must resume the same polling as a 202.
+    if (video?.processing_status === 'processing') getWatcher().start();
+    return video;
+  }
   for (const button of [check, cardCheck].filter(Boolean)) {
     button.addEventListener('click', async () => {
       button.disabled = true;
       try {
-        const video = await refreshStatus();
-        if (video?.processing_status === 'processing') getWatcher().start();
+        await refreshStatus();
       } catch (failure) { if (failure.name !== 'AbortError') reportError(failure.message); }
       finally { button.disabled = false; }
     });
   }
   if (cardStatus) {
-    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode});
+    renderStatus({processing_status: cardStatus.dataset.processingState, error_code: cardStatus.dataset.errorCode, moderation_status: cardStatus.dataset.moderationStatus});
     if (accepted && cardStatus.dataset.processingState === 'processing') getWatcher().start();
   }
   window.addEventListener('pageshow', event => {

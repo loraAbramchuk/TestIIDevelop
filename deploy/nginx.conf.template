@@ -12,6 +12,8 @@ server {
     server_tokens off;
     client_max_body_size 1m;
     proxy_connect_timeout 3s;
+    proxy_hide_header X-Content-Type-Options;
+    add_header X-Content-Type-Options nosniff always;
 
     location ~ "^/api/videos/[0-9a-fA-F-]{36}/content$" {
         client_max_body_size ${MAX_UPLOAD_BYTES};
@@ -34,5 +36,25 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # No public media directory. Authorized video delivery is a later step.
+    # Only an ACL-checked X-Accel-Redirect can enter this location.
+    location ~ "^/_protected_media/([0-9a-f]{32})/(playback[.]mp4|thumbnail[.]jpg)$" {
+        internal;
+        alias /data/media/processing/$1/$2;
+        disable_symlinks on;
+        sendfile on;
+        max_ranges 1;
+        etag off;
+        if_modified_since off;
+        open_file_cache off;
+        add_header Cache-Control "private, no-store" always;
+        add_header Vary Cookie always;
+        # Range filtering runs headers again for 416; keep the initial nosniff once.
+        add_header X-Content-Type-Options nosniff;
+    }
+
+    # No fallback path may serve sources, temporary files or processing locks.
+    location /_protected_media/ {
+        internal;
+        return 404;
+    }
 }

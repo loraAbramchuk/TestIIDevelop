@@ -59,10 +59,15 @@ def patch_video(
     return owner_output(video)
 
 
-def visible_video(db: Session, video_id: UUID, viewer_id: UUID | None) -> VideoView:
+def visible_record(db: Session, video_id: UUID, viewer_id: UUID | None) -> Video:
     video = db.scalar(select(Video).where(Video.id == video_id, viewable_by(viewer_id)))
     if video is None:
         raise not_found()
+    return video
+
+
+def visible_video(db: Session, video_id: UUID, viewer_id: UUID | None) -> VideoView:
+    video = visible_record(db, video_id, viewer_id)
     return VideoView(
         id=video.id,
         owner_id=video.owner_id,

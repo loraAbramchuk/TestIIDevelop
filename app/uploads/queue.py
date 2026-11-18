@@ -35,3 +35,13 @@ def enqueue_processing(db, settings, video_id, attempt_id) -> int:
         )
         .defer(video_id=str(video_id), attempt_id=str(attempt_id))
     )
+
+
+def cancel_processing(db, settings, job_ids):
+    if not job_ids:
+        return
+    db.execute(text("SET LOCAL search_path TO video_queue, public"))
+    raw = db.connection().connection.driver_connection
+    manager = queue_app(settings).job_manager
+    for job_id in sorted(set(job_ids)):
+        manager.cancel_job_by_id(job_id=job_id, abort=True, connection=raw)

@@ -197,12 +197,11 @@ def test_actual_mp4_to_ready_preserves_source_and_produces_faststart_preview(
         keys = video.playback_key, video.thumbnail_key
         for key in keys:
             assert processing.client.get("/" + key).status_code == 404
-        assert (
-            processing.client.get(
-                f"/api/videos/{video.id}/stream", headers=processing.headers
-            ).status_code
-            == 404
+        response = processing.client.get(
+            f"/api/videos/{video.id}/stream", headers=processing.headers
         )
+        assert response.status_code == 200
+        assert response.headers["x-accel-redirect"].endswith("/playback.mp4")
         source_hash = hashlib.sha256(playback).digest()
     # The same library job can be delivered again; it cannot publish a second result.
     execute(processing, identifiers)
@@ -362,6 +361,150 @@ def test_missing_source_is_reported_as_source_error(processing, samples):
         execute(processing, identifiers)
     with processing.factory() as db:
         assert db.get(Video, identifiers[0]).error_code == "source_missing_or_changed"
+
+
+@pytest.mark.integration
+def test_delete_ready_is_immediate_and_cleanup_survives_new_service(processing, samples):
+    identifiers = processing.upload((samples / "h264-aac.mp4").read_bytes())
+    execute(processing, identifiers)
+    with processing.factory() as db:
+        video = db.get(Video, identifiers[0])
+        files = [
+            processing.settings.media_root / key
+            for key in (video.source_key, video.playback_key, video.thumbnail_key)
+        ]
+        reserved = db.get(UploadAttempt, identifiers[1]).reserved_bytes
+    url = f"/api/videos/{identifiers[0]}"
+    assert processing.client.delete(url, headers=processing.headers).status_code == 204
+    assert all(path.exists() for path in files)  # No disk I/O in the request transaction.
+    for suffix in ("", "/status", "/stream", "/thumbnail"):
+        assert processing.client.get(url + suffix, headers=processing.headers).status_code == 404
+    with processing.factory() as db:
+        assert db.get(UploadAttempt, identifiers[1]).reserved_bytes == reserved
+        assert db.get(UploadAttempt, identifiers[1]).state == "cleanup"
+    maintenance = UploadService(processing.settings, processing.factory)
+    assert maintenance.sweep() >= 1
+    assert not any(path.exists() for path in files)
+    with processing.factory() as db:
+        assert db.get(UploadAttempt, identifiers[1]).state == "cleaned"
+        assert db.get(UploadAttempt, identifiers[1]).reserved_bytes == 0
+        assert db.get(Video, identifiers[0]).deleted_at is not None
+    assert processing.client.delete(url, headers=processing.headers).status_code == 204
+
+
+@pytest.mark.integration
+def test_delete_pending_cancels_job_and_late_delivery_cannot_publish(processing, samples):
+    identifiers = processing.upload((samples / "h264-silent.mp4").read_bytes())
+    assert (
+        processing.client.delete(
+            f"/api/videos/{identifiers[0]}", headers=processing.headers
+        ).status_code
+        == 204
+    )
+    with processing.factory() as db:
+        assert (
+            db.scalar(
+                text("SELECT status FROM video_queue.procrastinate_jobs WHERE id=:id"),
+                {"id": identifiers[2]},
+            )
+            == "cancelled"
+        )
+    execute(processing, identifiers)
+    with processing.factory() as db:
+        assert db.get(Video, identifiers[0]).playback_key is None
+        assert db.get(UploadAttempt, identifiers[1]).processing_attempts == 0
+    assert UploadService(processing.settings, processing.factory).clean(identifiers[1])
+
+
+@pytest.mark.integration
+def test_delete_during_media_preparation_fences_finish_and_keeps_locked_files(
+    processing, samples, monkeypatch
+):
+    identifiers = processing.upload((samples / "h264-silent.mp4").read_bytes())
+    prepare = MediaProcessor.prepare
+
+    def delete_before_finish(self, *args):
+        result = prepare(self, *args)
+        assert (
+            processing.client.delete(
+                f"/api/videos/{identifiers[0]}", headers=processing.headers
+            ).status_code
+            == 204
+        )
+        assert not UploadService(processing.settings, processing.factory).clean(identifiers[1])
+        with processing.factory() as db:
+            assert db.get(UploadAttempt, identifiers[1]).reserved_bytes > 0
+        return result
+
+    monkeypatch.setattr(MediaProcessor, "prepare", delete_before_finish)
+    with pytest.raises(ProcessingBusy):
+        execute(processing, identifiers)
+    assert UploadService(processing.settings, processing.factory).clean(identifiers[1])
+    with processing.factory() as db:
+        video = db.get(Video, identifiers[0])
+        assert video.deleted_at is not None and video.playback_key is None
+        assert db.get(UploadAttempt, identifiers[1]).reserved_bytes == 0
+
+
+@pytest.mark.integration
+def test_delete_during_receiving_fences_upload_and_defers_active_writer_cleanup(
+    processing, samples
+):
+    from app.uploads.service import UploadError
+    from app.uploads.storage import UploadWriter
+
+    data = (samples / "h264-silent.mp4").read_bytes()
+    response = processing.client.post(
+        "/api/videos", json={"title": "Active transfer"}, headers=processing.headers
+    )
+    identifier = UUID(response.json()["id"])
+    uploads = UploadService(processing.settings, processing.factory)
+    claim = uploads.admit(identifier, processing.owner, len(data))
+    writer = UploadWriter(processing.settings.media_root, claim.id)
+    try:
+        writer.start()
+        writer.write(data)
+        assert (
+            processing.client.delete(
+                f"/api/videos/{identifier}", headers=processing.headers
+            ).status_code
+            == 204
+        )
+        assert not uploads.renew(claim.id, len(data))
+        assert not uploads.clean(claim.id)
+        writer.finish()
+        with pytest.raises(UploadError, match="upload_lease_lost"):
+            uploads.complete(claim, len(data))
+    finally:
+        writer.close()
+    assert uploads.clean(claim.id)
+    with processing.factory() as db:
+        attempt = db.get(UploadAttempt, claim.id)
+        assert attempt.reserved_bytes == 0 and attempt.job_id is None
+
+
+@pytest.mark.integration
+def test_delete_rollback_leaves_video_and_job_active(processing, samples, monkeypatch):
+    from app.videos import deletion
+
+    identifiers = processing.upload((samples / "h264-silent.mp4").read_bytes())
+
+    def fail_cancel(*_):
+        raise RuntimeError("simulated queue transaction failure")
+
+    monkeypatch.setattr(deletion, "cancel_processing", fail_cancel)
+    with processing.factory() as db, pytest.raises(RuntimeError, match="simulated"):
+        deletion.delete_video(db, processing.settings, identifiers[0], processing.owner)
+    with processing.factory() as db:
+        assert db.get(Video, identifiers[0]).deleted_at is None
+        assert db.get(UploadAttempt, identifiers[1]).state == "processing"
+        assert (
+            db.scalar(
+                text("SELECT status FROM video_queue.procrastinate_jobs WHERE id=:id"),
+                {"id": identifiers[2]},
+            )
+            == "todo"
+        )
 
 
 @pytest.mark.integration
