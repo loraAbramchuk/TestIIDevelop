@@ -31,6 +31,7 @@ from app.moderation.schemas import (
     ReportReceipt,
     StaffReport,
     VideoModeration,
+    VideoModerationResult,
 )  # noqa: E402
 from app.playlists.router import router as playlist_router  # noqa: E402
 from app.playlists.schemas import (
@@ -126,6 +127,7 @@ def build_contract():
         ReportPage,
         ModerationVideo,
         VideoModeration,
+        VideoModerationResult,
         AuditView,
         AuditPage,
     ):
@@ -407,7 +409,7 @@ def build_contract():
     paths["/api/moderation/videos/{video_id}/visibility"] = {
         "post": operation(
             "Скрыть/восстановить, не меняя приватность, с атомарным аудитом",
-            output="ModerationVideo",
+            output="VideoModerationResult",
             body="VideoModeration",
             mutation=True,
         )

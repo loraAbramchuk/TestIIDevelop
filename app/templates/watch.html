@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script><script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/interactions.js') }}" defer></script><script src="{{ url_for('static', path='/report.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script><script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/interactions.js') }}" defer></script><script src="{{ url_for('static', path='/report.js') }}" defer></script>{% endblock %}
 {% block content %}
   <article class="watch">
     <video id="video-player" controls playsinline preload="metadata" poster="{{ video.thumbnail_url }}" aria-label="{{ video.title }}">

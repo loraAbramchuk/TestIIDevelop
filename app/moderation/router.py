@@ -18,6 +18,7 @@ from app.moderation.schemas import (
     ReportReceipt,
     StaffReport,
     VideoModeration,
+    VideoModerationResult,
 )
 from app.videos.router import ERRORS, PageCursor, PageLimit, Writer
 
@@ -97,7 +98,9 @@ def video(video_id: UUID, db: Db, user: Staff):
 
 
 @router.post(
-    "/api/moderation/videos/{video_id}/visibility", response_model=ModerationVideo, responses=ERRORS
+    "/api/moderation/videos/{video_id}/visibility",
+    response_model=VideoModerationResult,
+    responses=ERRORS,
 )
 def visibility(
     video_id: UUID, payload: VideoModeration, request: Request, db: Db, user: StaffWriter

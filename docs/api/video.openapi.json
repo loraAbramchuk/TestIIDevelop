@@ -4703,7 +4703,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ModerationVideo"
+                  "$ref": "#/components/schemas/VideoModerationResult"
                 }
               }
             }
@@ -6128,6 +6128,106 @@
           "status"
         ],
         "title": "VideoModeration",
+        "type": "object"
+      },
+      "VideoModerationResult": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          },
+          "processing_status": {
+            "enum": [
+              "uploading",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Processing Status",
+            "type": "string"
+          },
+          "moderation_status": {
+            "enum": [
+              "visible",
+              "hidden"
+            ],
+            "title": "Moderation Status",
+            "type": "string"
+          },
+          "moderation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderation Reason"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "can_watch": {
+            "title": "Can Watch",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "watch_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Url"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "visibility",
+          "processing_status",
+          "moderation_status",
+          "moderation_reason",
+          "deleted",
+          "can_watch",
+          "title",
+          "watch_url",
+          "changed"
+        ],
+        "title": "VideoModerationResult",
         "type": "object"
       },
       "AuditView": {

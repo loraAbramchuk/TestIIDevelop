@@ -466,3 +466,19 @@ re-upgrade. Отчёт: `/tmp/stage9-migration.json`. Downgrade теряет ж�
 POSTGRES_PASSWORD="$STAGE9_TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage9_verify HTTP_PORT=8095 \
 docker compose -p stage9-verify -f compose.yaml stop
 ```
+
+
+### Восстановление модерации после повторной проверки
+
+`moderation_browser_probe.cjs` также вызывает
+`moderation_recovery_browser_probe.cjs` на тех же изолированных аккаунтах и
+публичном видео, до отзыва роли. Дополнительные регистрации не нужны. Модуль
+проверяет malformed/null/array/неполные 200, отсутствие changed и неверный
+тип/статус, потерю ответа после реального commit, повтор без дубля, no-op из
+другой вкладки без ложного аудита, применение актуальной private ACL после
+решения, report_closed с неуспешным GET и ручным восстановлением без записи,
+сохранение длинного HTML-подобного черновика, video_deleted и общий API helper
+на плейлисте/лайке/комментарии/204. Артефакт:
+`/tmp/stage9-recovery-conflict-390.png`; результаты входят в
+`/tmp/stage9-browser.json`. Модуль завершает проверку удалением тестового
+публичного видео, поэтому использовать его можно только в изолированном сценарии.

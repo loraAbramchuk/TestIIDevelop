@@ -6,7 +6,13 @@ from sqlalchemy import select, tuple_
 from app.audit.service import record
 from app.errors import DomainError
 from app.models import Report, User, Video
-from app.moderation.schemas import ModerationVideo, ReportPage, ReportReceipt, StaffReport
+from app.moderation.schemas import (
+    ModerationVideo,
+    ReportPage,
+    ReportReceipt,
+    StaffReport,
+    VideoModerationResult,
+)
 from app.pagination import decode_cursor, encode_cursor
 from app.videos.access import viewable_by
 from app.videos.service import visible_record
@@ -159,7 +165,8 @@ def moderate_video(db, identifier, user_id, payload):
     video = locked_video(db, identifier)
     if video.deleted_at is not None:
         raise DomainError(409, "video_deleted", "Удалённое видео нельзя восстановить модерацией")
-    if video.moderation_status != payload.status:
+    changed = video.moderation_status != payload.status
+    if changed:
         previous = video.moderation_status
         video.moderation_status = payload.status
         video.moderation_reason = payload.reason if payload.status == "hidden" else None
@@ -174,4 +181,6 @@ def moderate_video(db, identifier, user_id, payload):
             status=payload.status,
         )
     db.commit()
-    return video_profile(db, identifier, user_id)
+    return VideoModerationResult(
+        **video_profile(db, identifier, user_id).model_dump(), changed=changed
+    )

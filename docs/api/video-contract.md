@@ -330,7 +330,7 @@ uv run --locked pytest tests/test_video_contracts.py
 | GET | `/api/moderation/reports/{report_id}` | 200 StaffReport |
 | POST | `/api/moderation/reports/{report_id}/decision` | 200 StaffReport |
 | GET | `/api/moderation/videos/{video_id}` | 200 ModerationVideo |
-| POST | `/api/moderation/videos/{video_id}/visibility` | 200 ModerationVideo |
+| POST | `/api/moderation/videos/{video_id}/visibility` | 200 VideoModerationResult |
 | GET | `/api/moderation/audit?video_id=...&limit=20&cursor=...` | 200 AuditPage |
 
 ReportCreate: reason=spam/prohibited/copyright/other и необязательное explanation
@@ -343,7 +343,10 @@ StaffReport дополнительно содержит reporter_id, decided_at/
 ReportDecision: status=resolved/dismissed, reason. VideoModeration:
 status=hidden/visible, reason. Причина после trim — 1–2000 символов. Неизвестные
 поля, null, NUL, непарные суррогаты — 422; пробельная причина — 422.
-Повтор состояния видео возвращает 200 без нового аудита/замены причины.
+VideoModerationResult расширяет ModerationVideo полем changed: true только при
+реальном переходе состояния и записи нового аудита; false при уже установленном
+состоянии. Повтор возвращает 200 без нового аудита/замены причины.
+GET-профиль видео по-прежнему возвращает ModerationVideo без changed.
 Повтор решения с теми же status/reason возвращает первоначальное решение;
 изменение рассмотренной жалобы — 409 report_closed. Причина восстановления
 остаётся в истории; текущий moderation_reason после восстановления — null.

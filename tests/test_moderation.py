@@ -574,6 +574,7 @@ def test_parallel_moderators_do_not_duplicate_actions_or_overwrite_decisions(mod
     with ThreadPoolExecutor(max_workers=5) as pool:
         responses = list(pool.map(lambda _: action(c, video, "hidden"), range(5)))
     assert all(r.status_code == 200 for r in responses)
+    assert sum(r.json()["changed"] for r in responses) == 1
 
     def close(data):
         actor, status = data
@@ -643,3 +644,29 @@ def test_owner_changes_cannot_bypass_hidden_and_report_never_creates_grants(mode
             )
             == 0
         )
+
+
+@pytest.mark.parametrize("initial", ["visible", "hidden"])
+@pytest.mark.parametrize("desired", ["visible", "hidden"])
+def test_visibility_response_distinguishes_audited_action_from_existing_state(
+    moderation, initial, desired
+):
+    c = moderation
+    video = c.seed(
+        moderation_status=initial,
+        moderation_reason="Прежняя причина" if initial == "hidden" else None,
+    )
+    result = action(c, video, desired, reason="Причина первого сотрудника")
+    assert result.status_code == 200
+    assert result.json()["changed"] is (initial != desired)
+    repeated = action(c, video, desired, actor="admin", reason="Несохранённый текст второго")
+    assert repeated.status_code == 200 and repeated.json()["changed"] is False
+    assert repeated.json()["moderation_reason"] == result.json()["moderation_reason"]
+    profile = c.client.get(f"/api/moderation/videos/{video}", headers=c.actors["moderator"].headers)
+    assert "changed" not in profile.json()
+    with c.factory() as db:
+        events = list(db.scalars(select(AuditEvent).where(AuditEvent.object_id == UUID(video))))
+        assert len(events) == int(initial != desired)
+        if events:
+            assert events[0].actor_id == c.actors["moderator"].id
+            assert events[0].reason == "Причина первого сотрудника"

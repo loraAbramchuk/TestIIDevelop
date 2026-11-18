@@ -72,6 +72,10 @@ class StaffReport(ReportReceipt):
     video: ModerationVideo
 
 
+class VideoModerationResult(ModerationVideo):
+    changed: bool
+
+
 class ReportPage(BaseModel):
     items: list[StaffReport]
     next_cursor: str | None = None
