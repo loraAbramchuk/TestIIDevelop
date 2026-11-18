@@ -1,0 +1,3 @@
+{% for entry in playlist_page['items'] %}
+  <article class="video-row playlist-summary"><h3><a href="/playlists/{{ entry.id }}">{{ entry.title }}</a></h3><p>Доступных видео: {{ entry.visible_count }}</p></article>
+{% else %}<p>Плейлистов пока нет.</p>{% endfor %}

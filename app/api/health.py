@@ -13,6 +13,8 @@ from app.models import (
     Channel,
     Comment,
     Like,
+    Playlist,
+    PlaylistItem,
     ProcessingRun,
     ProcessingWorker,
     Subscription,
@@ -58,6 +60,8 @@ def check_database(request: Request) -> None:
         session.execute(select(Subscription.channel_id).limit(1))
         session.execute(select(Like.video_id).limit(1))
         session.execute(select(Comment.id, Comment.text).limit(1))
+        session.execute(select(Playlist.id, Playlist.revision).limit(1))
+        session.execute(select(PlaylistItem.playlist_id, PlaylistItem.position).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:

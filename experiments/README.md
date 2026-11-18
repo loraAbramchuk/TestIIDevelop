@@ -330,3 +330,49 @@ POSTGRES_DB=stage7_interactions_probe uv run --locked python experiments/catalog
 доступ к новым лайкам/комментариям только при наличии разрешения на видео.
 Отчёт: /tmp/stage7-migration.json. Downgrade удаляет взаимодействия — это
 проверка сохранения прежних данных, не безопасный откат без резервной копии.
+
+## Плейлисты: этап 8
+
+Нужен свежий отдельный проект `stage8-verify` на localhost:8093, БД stage8_verify,
+актуальные app/web, FFmpeg/ffprobe, Playwright/Chromium, Node.js и Docker CLI.
+Пароль отдельной БД задайте в STAGE8_TEST_POSTGRES_PASSWORD.
+
+```bash
+docker compose build app web
+POSTGRES_PASSWORD="$STAGE8_TEST_POSTGRES_PASSWORD" POSTGRES_DB=stage8_verify HTTP_PORT=8093 \
+MAX_UPLOAD_BYTES=4194304 OWNER_MEDIA_QUOTA_BYTES=67108864 \
+MEDIA_CAPACITY_BYTES=536870912 MEDIA_MIN_FREE_BYTES=0 PREVIEW_BUDGET_BYTES=262144 \
+UPLOAD_CLEANUP_INTERVAL_SECONDS=2 PROCESSING_LEASE_SECONDS=6 \
+PROCESSING_HEARTBEAT_SECONDS=1 PROCESSING_RETRY_SECONDS=1 \
+docker compose -p stage8-verify -f compose.yaml up --no-build --detach --wait
+
+PLAYLIST_TEST_PROJECT=stage8-verify node experiments/playlists_browser_probe.cjs
+DOCS_TEST_BASE_URL=http://127.0.0.1:8093 node experiments/docs_browser_probe.cjs
+```
+
+Сценарий отказывается работать без выбора тестового проекта. Создаёт два аккаунта
+и три настоящих видео через upload/worker. Проверяет создание/переименование/
+удаление плейлиста, безопасный вывод названия, idempotent add/remove, просмотр
+MP4 из списка, права владельца и добавление приватного видео только после grant.
+Проверяет перестановку с limit=1, догрузку якоря, 503 и повтор страницы, 409 после
+изменения порядка в другой вкладке, сохранение черновиков, список на канале,
+отзыв grant, hidden/deleted и сохранность файла после удаления плейлиста.
+Hidden задаётся SQL только внутри stage8-verify-db-1. Проверяются 320/390/768/1440 px
+и название из 200 символов без пробелов. Запускать только на изолированных данных.
+
+Артефакты: /tmp/stage8-browser.json, /tmp/stage8-playlist-{desktop,mobile}.png.
+Повтор создаёт ещё два аккаунта; учитывайте лимит регистрации 5/IP/час.
+
+Для проверки миграции создайте отдельную **пустую** БД с суффиксом `_probe`:
+
+```bash
+docker compose exec -T db createdb -U video stage8_playlists_probe
+POSTGRES_DB=stage8_playlists_probe uv run --locked python experiments/catalog_migration_probe.py --baseline 0008
+```
+
+Инструмент создаёт данные этапа 7, выполняет upgrade/repeat upgrade,
+downgrade до 0008 и upgrade снова. Сравнивает пользователей/роли, сессии,
+UUID/профили каналов, подписки, видео/grants, очередь/загрузки, лайки, комментарии
+и хеши реальных файлов. Старая сессия работает с новым плейлистом без расширения
+прав на его приватные элементы. Отчёт: /tmp/stage8-migration.json.
+Downgrade удаляет только новые плейлисты, но для сохранения их данных нужен backup.

@@ -21,6 +21,8 @@ from app.errors import DomainError
 from app.interactions.router import router as interaction_router
 from app.models import User
 from app.navigation import local_return_path
+from app.playlists.pages import router as playlist_pages
+from app.playlists.router import router as playlist_router
 from app.storage_health import initialize_storage
 from app.templating import PACKAGE_ROOT, templates
 from app.uploads.router import router as upload_router
@@ -63,6 +65,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(catalog_router)
     app.include_router(channel_router)
     app.include_router(interaction_router)
+    app.include_router(playlist_router)
+    app.include_router(playlist_pages)
     app.include_router(catalog_pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
 
@@ -99,9 +103,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError):
-        if request.url.path in ("/", "/search", "/subscriptions") or request.url.path.startswith(
-            "/channels/"
-        ):
+        if request.url.path in (
+            "/",
+            "/search",
+            "/subscriptions",
+            "/my-playlists",
+        ) or request.url.path.startswith(("/channels/", "/playlists/")):
             return error_page(
                 request,
                 DomainError(
@@ -144,6 +151,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "/subscriptions",
                 "/my-channel",
                 "/search",
+                "/api/playlists",
+                "/playlists",
+                "/my-playlists",
             )
         ):
             response.headers["Cache-Control"] = "private, no-store"
