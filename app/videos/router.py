@@ -21,7 +21,7 @@ from app.videos.deletion import delete_video
 from app.videos.delivery import media_response
 
 router = APIRouter(tags=["videos"])
-ERRORS = {code: {"model": ContractError} for code in (400, 401, 403, 404, 409, 429)}
+ERRORS = {code: {"model": ContractError} for code in (400, 401, 403, 404, 409, 429, 503)}
 
 
 def mutation_user(user: CurrentUser, _csrf: Annotated[None, Depends(check_csrf)]) -> User:

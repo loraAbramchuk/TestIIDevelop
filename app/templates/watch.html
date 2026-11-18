@@ -9,6 +9,7 @@
     </video>
     <p id="player-error" class="error" role="alert"></p>
     <h1>{{ video.title }}</h1>
+    {% if author %}<p><a href="/channels/{{ author.id }}">{{ author.name }}</a></p>{% endif %}
     <p class="hint">{{ 'Приватное видео' if video.visibility == 'private' else 'Публичное видео' }} · {{ video.duration_seconds|round(1) }} с</p>
     {% if video.description %}<p class="video-description">{{ video.description }}</p>{% endif %}
     {% if user and user.id == video.owner_id %}

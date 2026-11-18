@@ -10,8 +10,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models import (
     AuthRateLimit,
     AuthSession,
+    Channel,
     ProcessingRun,
     ProcessingWorker,
+    Subscription,
     UploadAdmission,
     UploadAttempt,
     User,
@@ -50,6 +52,8 @@ def check_database(request: Request) -> None:
         session.execute(select(UploadAttempt.id, UploadAttempt.current_run_id).limit(1))
         session.execute(select(ProcessingRun.id).limit(1))
         session.execute(select(ProcessingWorker.id).limit(1))
+        session.execute(select(Channel.id, Channel.owner_id).limit(1))
+        session.execute(select(Subscription.channel_id).limit(1))
 
 
 def readiness_checks(request: Request) -> dict:

@@ -11,10 +11,16 @@
   <body>
     <header>
       <a class="brand" href="/">{{ app_name }}</a>
+      <form class="site-search" action="/search" method="get" role="search">
+        <input type="search" name="q" maxlength="200" aria-label="Поиск по названию" placeholder="Поиск видео" value="{{ search_query|default('') }}">
+        <button type="submit">Найти</button>
+      </form>
       <nav aria-label="Аккаунт">
         {% if user %}
           <a href="/upload">Загрузить</a>
           <a href="/studio">Мои видео</a>
+          <a href="/my-channel">Мой канал</a>
+          <a href="/subscriptions">Подписки</a>
           <span class="account-name">{{ user.display_name }}</span>
           <button type="button" id="logout">Выйти</button>
         {% else %}

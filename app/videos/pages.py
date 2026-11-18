@@ -3,9 +3,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 
 from app.auth_dependencies import Db, optional_user
-from app.models import User
+from app.models import Channel, User
 from app.templating import templates
 from app.videos import service
 from app.videos.router import PageCursor, PageLimit
@@ -30,7 +31,12 @@ def watch_page(video_id: UUID, request: Request, db: Db, user: PageUser):
     return templates.TemplateResponse(
         request=request,
         name="watch.html",
-        context={"app_name": request.app.state.settings.app_name, "user": user, "video": video},
+        context={
+            "app_name": request.app.state.settings.app_name,
+            "user": user,
+            "video": video,
+            "author": db.scalar(select(Channel).where(Channel.owner_id == video.owner_id)),
+        },
     )
 
 

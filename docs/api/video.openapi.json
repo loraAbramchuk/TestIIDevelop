@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Video API contracts — stage 5 protected playback and deletion",
-    "version": "0.5.0",
+    "title": "Video API contracts — stage 6 catalog, channels and subscriptions",
+    "version": "0.6.0",
     "description": "x-implemented отмечает реализованные операции; действующий /docs содержит только рабочие маршруты. Файлы раздаёт Nginx после проверки доступа. Secure cookie называется __Host-video_session."
   },
   "paths": {
@@ -66,6 +66,16 @@
           },
           "429": {
             "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
             "content": {
               "application/json": {
                 "schema": {
@@ -169,6 +179,16 @@
               }
             }
           },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Ошибки полей: detail — массив loc/msg/type без input"
           }
@@ -198,6 +218,118 @@
             }
           }
         }
+      },
+      "get": {
+        "summary": "Публичная лента и поиск только по доступным public-видео",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/videos/{video_id}": {
@@ -260,6 +392,16 @@
           },
           "429": {
             "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
             "content": {
               "application/json": {
                 "schema": {
@@ -335,6 +477,16 @@
           },
           "429": {
             "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
             "content": {
               "application/json": {
                 "schema": {
@@ -425,6 +577,16 @@
           },
           "429": {
             "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
             "content": {
               "application/json": {
                 "schema": {
@@ -529,6 +691,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -617,6 +789,16 @@
               }
             }
           },
+          "503": {
+            "description": "Очередь заполнена; Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Длина тела не соответствует объявленной",
             "content": {
@@ -659,16 +841,6 @@
           },
           "507": {
             "description": "Недостаточно места или квоты",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContractError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Очередь заполнена; Retry-After",
             "content": {
               "application/json": {
                 "schema": {
@@ -784,6 +956,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -890,6 +1072,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -960,6 +1152,16 @@
           },
           "429": {
             "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
             "content": {
               "application/json": {
                 "schema": {
@@ -1435,6 +1637,720 @@
           }
         }
       ]
+    },
+    "/api/channels/me": {
+      "get": {
+        "summary": "Свой канал",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/channels/{channel_id}": {
+      "get": {
+        "summary": "Публичный профиль канала",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "SessionCookie": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Редактировать свой канал",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибки полей: detail — массив loc/msg/type без input"
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelPatch"
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "channel_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
+    },
+    "/api/channels/{channel_id}/videos": {
+      "get": {
+        "summary": "Видео канала с учётом ACL посетителя",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "channel_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
+    },
+    "/api/channels/{channel_id}/subscription": {
+      "put": {
+        "summary": "Идемпотентная подписка, кроме собственного канала",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Идемпотентная отмена подписки",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "channel_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
+    },
+    "/api/subscriptions": {
+      "get": {
+        "summary": "Свои подписки",
+        "tags": [
+          "videos"
+        ],
+        "x-implemented": true,
+        "responses": {
+          "200": {
+            "description": "Успешный ответ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется вход",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка CSRF или недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден или недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Конфликт состояния",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Лимит запросов; Retry-After в секундах",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Сервис временно недоступен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1782,6 +2698,255 @@
           "detail"
         ],
         "title": "ContractError",
+        "type": "object"
+      },
+      "CatalogVideo": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
+          },
+          "duration_seconds": {
+            "exclusiveMinimum": 0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "stream_url": {
+            "title": "Stream Url",
+            "type": "string"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/ChannelSummary"
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "title",
+          "description",
+          "visibility",
+          "duration_seconds",
+          "width",
+          "height",
+          "stream_url",
+          "thumbnail_url",
+          "created_at",
+          "author"
+        ],
+        "title": "CatalogVideo",
+        "type": "object"
+      },
+      "ChannelSummary": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "name"
+        ],
+        "title": "ChannelSummary",
+        "type": "object"
+      },
+      "CatalogPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogVideo"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CatalogPage",
+        "type": "object"
+      },
+      "ChannelView": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "subscriber_count": {
+            "minimum": 0,
+            "title": "Subscriber Count",
+            "type": "integer"
+          },
+          "is_subscribed": {
+            "title": "Is Subscribed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "name",
+          "description",
+          "created_at",
+          "updated_at",
+          "subscriber_count",
+          "is_subscribed"
+        ],
+        "title": "ChannelView",
+        "type": "object"
+      },
+      "ChannelList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ChannelList",
+        "type": "object"
+      },
+      "ChannelPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "title": "ChannelPatch",
+        "type": "object"
+      },
+      "SubscriptionState": {
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "is_subscribed": {
+            "title": "Is Subscribed",
+            "type": "boolean"
+          },
+          "subscriber_count": {
+            "minimum": 0,
+            "title": "Subscriber Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id",
+          "is_subscribed",
+          "subscriber_count"
+        ],
+        "title": "SubscriptionState",
         "type": "object"
       }
     },

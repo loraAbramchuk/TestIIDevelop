@@ -1,17 +1,39 @@
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import health
 from app.storage_health import MARKER
 
 
-def test_home_and_static(client):
+def test_home_and_static(client, monkeypatch):
+    from app.catalog import service
+    from app.catalog.schemas import CatalogPage
+
+    monkeypatch.setattr(service, "list_videos", lambda *_args, **_kwargs: CatalogPage(items=[]))
     response = client.get("/")
     assert response.status_code == 200
     assert "Пока нет видео" in response.text
     assert client.get("/static/styles.css").status_code == 200
+
+
+def test_catalog_database_failure_has_a_clear_page_and_api_error(client):
+    response = client.get("/")
+    assert response.status_code == 503 and "Сервис временно недоступен" in response.text
+    assert "no-store" in response.headers["cache-control"]
+    response = client.get("/api/videos")
+    assert response.status_code == 503 and response.json()["code"] == "service_unavailable"
+    assert "no-store" in response.headers["cache-control"]
+
+
+@pytest.mark.parametrize("path", ["/search?q=" + "x" * 201, "/channels/not-a-uuid", "/?limit=0"])
+def test_invalid_catalog_page_parameters_have_a_friendly_html_error(client, path):
+    response = client.get(path)
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Проверьте ссылку" in response.text
 
 
 def test_docs_and_openapi(client):

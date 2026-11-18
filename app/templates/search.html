@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Поиск — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <h1>Поиск видео</h1>
+  {% if not search_query %}
+    <p>Введите часть названия в строке поиска.</p>
+  {% elif page['items'] %}
+    <p>По запросу «{{ search_query }}»</p>
+    {% include "video_grid.html" %}
+  {% else %}
+    <section class="empty"><h2>Ничего не найдено</h2><p>Попробуйте другое название.</p></section>
+  {% endif %}
+  {% if page.next_cursor %}<p><a class="next-page" href="/search?q={{ search_query|urlencode }}&amp;limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a></p>{% endif %}
+{% endblock %}
