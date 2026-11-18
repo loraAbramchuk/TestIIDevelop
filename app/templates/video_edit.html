@@ -32,15 +32,17 @@
       <label for="user_id">ID пользователя</label>
       <input id="user_id" name="user_id" required maxlength="36" autocomplete="off">
       <p class="error" role="alert" data-error></p>
+      <p class="success" role="status" id="grant-success"></p>
       <button type="submit">Разрешить просмотр</button>
     </form>
-    <ul class="grant-list">
+    <button type="button" id="grants-refresh" class="secondary">Обновить список разрешений</button>
+    <ul class="grant-list" id="video-grants" data-video-id="{{ video.id }}">
       {% for grant in grants.items %}
         <li><code>{{ grant.user_id }}</code><button type="button" data-revoke="{{ grant.user_id }}" data-video-id="{{ video.id }}">Отозвать доступ</button></li>
-      {% else %}<li>Дополнительных разрешений нет.</li>{% endfor %}
+      {% else %}<li>{{ 'На этой странице разрешений нет.' if request.query_params.get('cursor') else 'Дополнительных разрешений нет.' }}</li>{% endfor %}
     </ul>
     <p class="error" role="alert" id="grant-error"></p>
-    {% if grants.next_cursor %}<a href="/studio/videos/{{ video.id }}?cursor={{ grants.next_cursor|urlencode }}">Следующая страница разрешений</a>{% endif %}
+    <a id="grants-next" {% if grants.next_cursor %}href="/studio/videos/{{ video.id }}?limit={{ request.query_params.get('limit', '20')|urlencode }}&amp;cursor={{ grants.next_cursor|urlencode }}"{% else %}hidden{% endif %}>Следующая страница разрешений</a>
   </section>
   <section class="panel" aria-labelledby="delete-title">
     <h2 id="delete-title">Удаление видео</h2>

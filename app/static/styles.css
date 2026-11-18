@@ -30,6 +30,7 @@ textarea:focus-visible, select:focus-visible { outline: 2px solid #5946da; outli
 .video-row { display: flex; flex-direction: column; gap: .6rem; padding: 1rem; margin: .6rem 0; background: white; border: 1px solid #e2e5ef; border-radius: 8px; overflow-wrap: anywhere; }
 .video-row span { color: #5b6579; font-size: .9rem; }
 .grant-list { padding: 0; list-style: none; }
+#grants-refresh { margin-top: .75rem; }
 .grant-list li { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
 .account-id, .grant-list code { overflow-wrap: anywhere; }
 .success { color: #11633b; }
