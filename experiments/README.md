@@ -657,3 +657,19 @@ FRONTEND_TEST_BASE_URL=http://127.0.0.1:8098 node experiments/frontend_auth_reco
 Также проверяются skip link под фиксированной шапкой и контраст кнопок.
 Отчёт: `/tmp/frontend-yt/auth-recovery.json`. Основной UI-сценарий запускается
 отдельно командой выше.
+
+### Общая проверка приложения
+
+На уже подготовленной фикстуре `frontend_yt_preview` с web/worker/Nginx:
+
+```bash
+FRONTEND_TEST_BASE_URL=http://127.0.0.1:8098 node experiments/application_audit_probe.cjs
+```
+
+Сценарий воспроизводит зависшую подготовку загрузки, GET обсуждения/плейлиста/
+разрешений, неполный ответ на комментарий и ошибки HTML-страниц. Создаёт одну
+временную карточку, удаляет её в finally; запросы с эмуляцией сбоя не меняют
+серверные данные. `issues_found`/exit 1 — подтверждённые замечания, exit 2 —
+ошибка выполнения; exit 0 — замечания не воспроизводятся. Нужны те же приватные
+fixture accounts, что выше; основной экземпляр не подходит.
+Отчёт: [общая проверка](../docs/verification/application-audit.md).
