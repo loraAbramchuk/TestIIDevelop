@@ -28,7 +28,19 @@ def test_catalog_database_failure_has_a_clear_page_and_api_error(client):
     assert "no-store" in response.headers["cache-control"]
 
 
-@pytest.mark.parametrize("path", ["/search?q=" + "x" * 201, "/channels/not-a-uuid", "/?limit=0"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/search?q=" + "x" * 201,
+        "/channels/not-a-uuid",
+        "/?limit=0",
+        "/watch/not-a-uuid",
+        "/studio/videos/not-a-uuid",
+        "/studio?limit=abc",
+        "/studio?limit=0",
+        "/studio/videos/00000000-0000-0000-0000-000000000001?limit=0",
+    ],
+)
 def test_invalid_catalog_page_parameters_have_a_friendly_html_error(client, path):
     response = client.get(path)
     assert response.status_code == 422

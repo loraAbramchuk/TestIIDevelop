@@ -103,6 +103,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(VideoError)
     async def video_error(request: Request, exc: VideoError):
+        if not request.url.path.startswith("/api/"):
+            return error_page(request, exc)
         return JSONResponse(
             status_code=exc.status,
             content={"detail": exc.message, "code": exc.code},
@@ -117,7 +119,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/subscriptions",
             "/my-playlists",
             "/moderation",
-        ) or request.url.path.startswith(("/channels/", "/playlists/", "/moderation/", "/admin/")):
+            "/studio",
+        ) or request.url.path.startswith(
+            ("/channels/", "/playlists/", "/moderation/", "/admin/", "/studio/", "/watch/")
+        ):
             return error_page(
                 request,
                 DomainError(

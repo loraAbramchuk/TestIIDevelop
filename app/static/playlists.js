@@ -72,15 +72,11 @@
     }
   }
   async function read(suffix = '') {
-    const response = await fetch(base + suffix, {credentials: 'same-origin', cache: 'no-store'});
-    let data;
-    try { data = await response.json(); } catch {}
-    if (!response.ok || !data || typeof data !== 'object') {
-      const failure = apiFailure(typeof data?.detail === 'string' ? data.detail : 'Сервис временно недоступен. Попробуйте позже.', response.status, data?.code);
+    try { return await apiRead(base + suffix); }
+    catch (failure) {
       failure.fromPlaylistRead = true;
       throw failure;
     }
-    return data;
   }
   function render(page, append = false) {
     if (!append) grid.replaceChildren();

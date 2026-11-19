@@ -28,7 +28,7 @@
         <button type="submit" aria-label="Найти">{{ icon('search') }}</button>
       </form>
       <nav class="header-actions" aria-label="Аккаунт">
-        <a class="create-link" href="/upload">{{ icon('plus') }}<span>Создать</span></a>
+        <a class="create-link" href="/upload" aria-label="Загрузить видео">{{ icon('plus') }}<span>Загрузить</span></a>
         {% if user %}
           <details class="account-menu">
             <summary aria-label="Меню аккаунта"><span class="avatar user-avatar" aria-hidden="true">{{ user.display_name[:1]|upper }}</span><span class="account-name">{{ user.display_name }}</span></summary>

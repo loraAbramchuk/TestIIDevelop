@@ -9,6 +9,11 @@
   const form = document.getElementById('comment-form'), input = document.getElementById('comment-text');
   const error = document.getElementById('interaction-error'), success = document.getElementById('interaction-success');
   let busy = false, loaded = false, liked = false, cursor = null;
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const count = value => Number.isSafeInteger(value) && value >= 0;
+  const validLikes = data => data?.video_id === panel.dataset.videoId && count(data.like_count) && typeof data.is_liked === 'boolean';
+  const validComment = data => uuid(data?.id) && data.video_id === panel.dataset.videoId && typeof data.text === 'string' && Number.isFinite(Date.parse(data.created_at)) && uuid(data.author?.id) && typeof data.author.name === 'string' && typeof data.can_delete === 'boolean';
+  const validComments = data => Array.isArray(data?.items) && data.items.every(validComment) && count(data.total_count) && (data.next_cursor === null || typeof data.next_cursor === 'string');
 
   function setBusy(value) {
     busy = value;
@@ -27,12 +32,7 @@
     } else error.textContent = reason instanceof TypeError ? fallback : reason.message;
   }
   async function read(path) {
-    const response = await fetch(base + path, {credentials: 'same-origin', cache: 'no-store'});
-    let data;
-    try { data = await response.json(); } catch {}
-    if (!response.ok) throw apiFailure(typeof data?.detail === 'string' ? data.detail : 'Сервис временно недоступен. Попробуйте позже.', response.status, data?.code);
-    if (!data || typeof data !== 'object') throw apiFailure('Сервис временно недоступен. Попробуйте позже.', response.status);
-    return data;
+    return apiRead(base + path, path === '/likes' ? validLikes : validComments);
   }
   function showLikes(state) {
     liked = state.is_liked;
@@ -84,7 +84,7 @@
   if (like) like.addEventListener('click', async () => {
     if (busy) return;
     clearMessages(); setBusy(true);
-    try { showLikes(await apiRequest(base + '/likes', liked ? 'DELETE' : 'PUT')); }
+    try { showLikes(await apiRequest(base + '/likes', liked ? 'DELETE' : 'PUT', undefined, validLikes)); }
     catch (reason) { failure(reason); }
     finally { setBusy(false); }
   });
@@ -103,11 +103,14 @@
     clearMessages(); setBusy(true); input.disabled = true;
     let created = false;
     try {
-      await apiRequest(base + '/comments', 'POST', {text});
+      await apiRequest(base + '/comments', 'POST', {text}, data => validComment(data) && data.can_delete);
       created = true; input.value = '';
       await reload(); success.textContent = 'Комментарий добавлен.';
     } catch (reason) {
       failure(reason, 'Не удалось подтвердить отправку. Обновите обсуждение перед повторной попыткой.');
+      if (!created && (reason instanceof TypeError || ['invalid_response', 'request_timeout'].includes(reason.code) || reason.status >= 500)) {
+        error.textContent = 'Не удалось подтвердить отправку. Текст сохранён. Нажмите «Обновить обсуждение» перед повторной попыткой.';
+      }
       if (created) success.textContent = 'Комментарий добавлен. Обновите обсуждение, чтобы увидеть изменения.';
     } finally { input.disabled = false; setBusy(false); }
   });

@@ -247,7 +247,10 @@ def test_nonowner_cannot_manage_even_public_video(video_client, actors, seed_vid
     assert video_client.get(base).status_code == 200
     assert video_client.get(base + "/status").status_code == 404
     assert video_client.get(base + "/grants").status_code == 404
-    assert video_client.get(f"/studio/videos/{video_id}").status_code == 404
+    page = video_client.get(f"/studio/videos/{video_id}")
+    assert page.status_code == 404
+    assert page.headers["content-type"].startswith("text/html")
+    assert "На главную" in page.text and "Видео не найдено" in page.text
     assert video_client.patch(base, json={"title": "Hijack"}, headers=headers).status_code == 404
     assert (
         video_client.put(base + f"/grants/{actors[actor]['id']}", headers=headers).status_code
@@ -415,6 +418,11 @@ def test_owner_pages_pagination_and_cursor_scoping(video_client, actors, seed_vi
     assert (
         response.status_code == 200 and "Own 0" in response.text and "Other 0" not in response.text
     )
+    for path in ("/studio", f"/studio/videos/{next(iter(own_ids))}"):
+        response = video_client.get(path, params={"cursor": "not!base64"})
+        assert response.status_code == 400
+        assert response.headers["content-type"].startswith("text/html")
+        assert "На главную" in response.text
     act(video_client, actors, "stranger")
     assert (
         video_client.get("/api/studio/videos", params={"cursor": first["next_cursor"]}).status_code
