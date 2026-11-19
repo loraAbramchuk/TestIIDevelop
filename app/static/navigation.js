@@ -11,7 +11,7 @@
     document.body.classList.toggle('sidebar-collapsed', desktop.matches && collapsed);
     document.body.classList.toggle('sidebar-open', !desktop.matches && opened);
     const modal = !desktop.matches && opened;
-    for (const node of document.querySelectorAll('main, .site-search, .header-actions, .brand')) node.inert = modal;
+    for (const node of document.querySelectorAll('main, .site-search, .header-actions, .brand, .session-notice')) node.inert = modal;
     sidebar.inert = !visible;
     sidebar.setAttribute('aria-hidden', String(!visible));
     toggle.setAttribute('aria-expanded', String(visible));

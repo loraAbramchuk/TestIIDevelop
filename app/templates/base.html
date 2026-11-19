@@ -70,6 +70,10 @@
     </aside>
     <noscript><nav class="noscript-navigation" aria-label="Разделы"><a href="/">Главная</a><a href="/subscriptions">Подписки</a><a href="/upload">Загрузить</a></nav></noscript>
     <main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
-    <p id="session-error" role="alert" class="error session-notice"></p>
+    <div id="session-notice" class="session-notice" hidden>
+      <p id="session-status" class="hint" role="status" hidden></p>
+      <p id="session-error" role="alert" class="error"></p>
+      <button id="logout-check" type="button" class="secondary" hidden>Проверить выход</button>
+    </div>
   </body>
 </html>
