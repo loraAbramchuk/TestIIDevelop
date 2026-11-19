@@ -22,6 +22,26 @@ class MediaInfo:
     audio: bool
 
 
+def tool_failure(output, returncode):
+    """Classify diagnostics without exposing filenames, private keys or tool stderr."""
+    if any(message in output for message in (b"No space left on device", b"Disk quota exceeded")):
+        return TransientProcessingError("processing_storage_full")
+    if any(
+        message in output
+        for message in (b"Read-only file system", b"Permission denied", b"Input/output error")
+    ):
+        return TransientProcessingError("processing_storage_unavailable")
+    if b"pthread_create" in output or b"Resource temporarily unavailable" in output:
+        return TransientProcessingError("processing_resources_unavailable")
+    if (
+        returncode in (-signal.SIGXFSZ, -signal.SIGKILL, -signal.SIGXCPU)
+        or b"File too large" in output
+        or b"Cannot allocate memory" in output
+    ):
+        return ProcessingError("processing_budget_exceeded")
+    return ProcessingError("invalid_media")
+
+
 def validate_probe(document: dict, settings) -> MediaInfo:
     try:
         streams = document["streams"]
@@ -145,6 +165,9 @@ class MediaProcessor:
             str(self.settings.processing_timeout_seconds + 1),
             str(maximum),
             tool,
+            # Container CPU quotas need not change the host CPU count seen by FFmpeg.
+            # Bound its internal pools as well as individual codecs/filters.
+            *(["-cpucount", "1"] if tool in ("ffmpeg", "ffprobe") else []),
             *arguments,
         ]
         output = bytearray()
@@ -176,28 +199,7 @@ class MediaProcessor:
                 process.wait(timeout=max(0.1, deadline - time.monotonic()))
             self.check()
             if process.returncode:
-                if any(
-                    message in output
-                    for message in (b"No space left on device", b"Disk quota exceeded")
-                ):
-                    raise TransientProcessingError("processing_storage_full")
-                if any(
-                    message in output
-                    for message in (
-                        b"Read-only file system",
-                        b"Permission denied",
-                        b"Input/output error",
-                    )
-                ):
-                    raise TransientProcessingError("processing_storage_unavailable")
-                code = (
-                    "processing_budget_exceeded"
-                    if process.returncode in (-signal.SIGXFSZ, -signal.SIGKILL, -signal.SIGXCPU)
-                    or b"File too large" in output
-                    or b"Cannot allocate memory" in output
-                    else "invalid_media"
-                )
-                raise ProcessingError(code)
+                raise tool_failure(output, process.returncode)
             return bytes(output)
         except subprocess.TimeoutExpired:
             raise ProcessingError("processing_timeout") from None

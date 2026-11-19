@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
-from app.auth_dependencies import CurrentUser, Db, optional_user
+from app.auth_dependencies import CurrentUser, Db, VerifiedUser, optional_user
 from app.auth_protection import check_csrf, rate_limit
 from app.models import User
 from app.video_contracts import (
@@ -24,7 +24,7 @@ router = APIRouter(tags=["videos"])
 ERRORS = {code: {"model": ContractError} for code in (400, 401, 403, 404, 409, 429, 503)}
 
 
-def mutation_user(user: CurrentUser, _csrf: Annotated[None, Depends(check_csrf)]) -> User:
+def mutation_user(user: VerifiedUser, _csrf: Annotated[None, Depends(check_csrf)]) -> User:
     return user
 
 

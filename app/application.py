@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
+from app import __version__
 from app.administration.pages import router as admin_pages
 from app.administration.router import router as admin_router
 from app.api.auth import router as auth_router
@@ -21,6 +22,7 @@ from app.config import Settings
 from app.db import make_engine, make_session_factory
 from app.errors import DomainError
 from app.interactions.router import router as interaction_router
+from app.mail.router import router as mail_router
 from app.models import User
 from app.moderation.pages import router as moderation_pages
 from app.moderation.router import router as moderation_router
@@ -49,12 +51,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version=__version__,
         docs_url=None,
         description=(
             "API видеоплатформы. Авторизация: сначала GET /api/auth/csrf, затем "
             "передайте csrf_token в X-CSRF-Token при регистрации, входе и выходе. "
             "Сессия хранится в HttpOnly cookie."
+            " Новые аккаунты подтверждают email ссылкой из письма перед изменением контента. "
+            "Восстановление: POST /api/auth/password/request и одноразовая ссылка из письма; "
+            "после смены пароля прежние сеансы завершаются."
         ),
         lifespan=lifespan,
     )
@@ -65,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_pages)
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(mail_router)
     app.include_router(video_router)
     app.include_router(upload_router)
     app.include_router(video_pages)
@@ -152,6 +158,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def response_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
+        if request.url.path in ("/verify-email", "/forgot-password", "/reset-password"):
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Robots-Tag"] = "noindex, nofollow"
         if request.url.path.startswith(
             (
                 "/api/videos",
@@ -180,6 +189,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/",
             "/login",
             "/register",
+            "/verify-email",
+            "/forgot-password",
+            "/reset-password",
         ):
             response.headers["Cache-Control"] = "no-store"
             response.headers.append("Vary", "Cookie")
@@ -200,6 +212,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "register": request.url.path == "/register",
                 "next_path": next_path,
             },
+        )
+
+    @app.get("/verify-email", response_class=HTMLResponse, include_in_schema=False)
+    @app.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+    @app.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+    def mail_page(request: Request, user: Annotated[User | None, Depends(optional_user)]):
+        return templates.TemplateResponse(
+            request=request,
+            name="auth_mail.html",
+            context={"app_name": settings.app_name, "user": user, "action": request.url.path[1:]},
         )
 
     return app

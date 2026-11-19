@@ -57,8 +57,21 @@ def current_user(
 CurrentUser = Annotated[User, Depends(current_user)]
 
 
+def verified_user(request: Request, user: CurrentUser) -> User:
+    if request.app.state.settings.auth_require_verified_email and not user.email_verified:
+        from app.errors import DomainError
+
+        raise DomainError(
+            403, "email_not_verified", "Подтвердите email, чтобы выполнить это действие."
+        )
+    return user
+
+
+VerifiedUser = Annotated[User, Depends(verified_user)]
+
+
 def require_roles(*roles: str):
-    def check(user: CurrentUser) -> User:
+    def check(user: VerifiedUser) -> User:
         # The user is loaded from the database on each request; role changes apply immediately.
         if user.role not in roles:
             raise HTTPException(403, "Недостаточно прав")

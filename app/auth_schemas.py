@@ -44,6 +44,7 @@ class UserOutput(BaseModel):
     display_name: str
     role: Literal["user", "moderator", "admin"]
     created_at: datetime
+    email_verified: bool = False
 
 
 class CsrfOutput(BaseModel):
@@ -52,3 +53,32 @@ class CsrfOutput(BaseModel):
 
 class AuthOutput(CsrfOutput):
     user: UserOutput
+
+
+class EmailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    email: EmailStr = Field(max_length=320)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class ActionTokenInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    token: SecretStr = Field(min_length=1, max_length=128)
+
+
+class ResetPasswordInput(ActionTokenInput):
+    password: SecretStr = Field(min_length=12, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        validate_unicode(value.get_secret_value())
+        return value
+
+
+class ActionReceipt(BaseModel):
+    detail: str

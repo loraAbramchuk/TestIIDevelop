@@ -5,6 +5,13 @@ from app.application import create_app
 from app.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def mail_policy_for_existing_business_tests(monkeypatch):
+    # Existing module suites exercise business logic independently of email delivery.
+    # The email lifecycle/security suite explicitly enables the production policy.
+    monkeypatch.setenv("AUTH_REQUIRE_VERIFIED_EMAIL", "false")
+
+
 @pytest.fixture
 def app(tmp_path):
     settings = Settings(

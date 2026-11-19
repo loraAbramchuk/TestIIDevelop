@@ -20,6 +20,7 @@
       <button id="auth-check" class="secondary" type="button" hidden>Проверить вход</button>
       <button type="submit">{{ 'Зарегистрироваться' if register else 'Войти' }}</button>
     </form>
+    {% if not register %}<p><a href="/forgot-password">Забыли пароль?</a></p>{% endif %}
     <p>{% if register %}Уже есть аккаунт? <a href="/login?next={{ next_path|urlencode }}">Войти</a>
        {% else %}Нет аккаунта? <a href="/register?next={{ next_path|urlencode }}">Зарегистрироваться</a>{% endif %}</p>
     <noscript>Для отправки формы включите JavaScript.</noscript>
