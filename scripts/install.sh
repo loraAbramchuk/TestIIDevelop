@@ -39,7 +39,7 @@ done
 [[ ! $repository =~ ^https?://[^/]*@ ]] || { echo 'Use SSH credentials instead of tokens in repository URLs' >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl git python3 age openssh-client certbot openssl
+apt-get install -y --no-install-recommends ca-certificates curl git python3 age openssh-client certbot openssl tar
 if ! docker compose version >/dev/null 2>&1; then
     # Ubuntu's maintained packages avoid an additional APT signing/repository dependency.
     apt-get install -y docker.io docker-compose-v2 docker-buildx

@@ -586,3 +586,29 @@ APT-зависимостями, локальным fixture Git origin, проб�
 TLS verification сохраняется. Это не проверка systemd, установки daemon на VM,
 firewall, публичного DNS/ACME или физически удалённого backup-хоста. Эти проверки
 выполняются отдельно на предоставленной инфраструктуре по docs/deployment.md.
+
+
+### Исправления этапа 11: независимый повтор восстановления
+
+Для повторной проверки без удаления прежнего `stage11-restored` предусмотрен
+фиксированный suffix `-fixes`. Подготовьте отдельный приватный `/tmp/stage11-dr-fixes`
+с такими же **тестовыми** age/SSH ключами и known_hosts. SSH fixture должен быть
+запущен вместе с sshd, порты 8189/8449/8190/8450 свободны:
+
+```bash
+STAGE11_TEST_SUFFIX=-fixes STAGE11_TEST_PROJECT=stage11-source-fixes uv run --locked python experiments/deployment_restore_probe.py
+STAGE11_TEST_SUFFIX=-fixes node experiments/restored_playback_probe.cjs
+```
+
+Проба создаёт полноценные cert/chain/fullchain/private-key symlinks и Certbot
+`renewal/*.conf`. После удаления source и восстановления проверяет перенос путей.
+Для независимой проверки парсера используйте настоящий Certbot с восстановленным
+`--config-dir`: `certbot certificates`; конфигурация не должна ссылаться на source.
+Это не заменяет публичный `renew --dry-run`: частный домен video.test не проходит ACME.
+Отчёты suffix-варианта: `/tmp/stage11-restore-fixes.json`, `/tmp/stage11-browser-fixes.json`.
+
+`tests/test_ops_storage.py` проверяет реальный обмен pipe при больших stdout/stderr,
+ограничение памяти ошибки, завершение дочерних процессов, таймауты, обратное давление
+при импорте и отказ до запуска при достижении резерва. Проверки preflight/изменения
+свободного места, извлечения архива и переноса/истечения сертификатов — в
+`tests/test_operations.py`. Тесты не расходуют весь реальный диск приложения.

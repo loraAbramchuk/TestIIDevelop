@@ -14,9 +14,11 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE = Path("/tmp/stage11-dr")
-SOURCE = "stage11-source"
-TARGET = "stage11-restored"
+SUFFIX = os.getenv("STAGE11_TEST_SUFFIX", "")
+assert SUFFIX in ("", "-fixes"), "Only disposable fixture names are allowed"
+BASE = Path("/tmp/stage11-dr" + SUFFIX)
+SOURCE = "stage11-source" + SUFFIX
+TARGET = "stage11-restored" + SUFFIX
 DOMAIN = "video.test"
 
 
@@ -149,6 +151,30 @@ def main():
     )
     (live / "fullchain.pem").symlink_to("../../archive/" + DOMAIN + "/fullchain1.pem")
     (live / "privkey.pem").symlink_to("../../archive/" + DOMAIN + "/privkey1.pem")
+    (certdir / "cert1.pem").write_bytes((certdir / "server.crt").read_bytes())
+    (certdir / "chain1.pem").write_bytes((BASE / "ca.crt").read_bytes())
+    for name in ("cert", "chain"):
+        (live / (name + ".pem")).symlink_to("../../archive/" + DOMAIN + "/" + name + "1.pem")
+    renewal = tls / "renewal"
+    renewal.mkdir()
+    (renewal / (DOMAIN + ".conf")).write_text(
+        "version = 2.9.0\narchive_dir = "
+        + str(certdir)
+        + "\n"
+        + "".join(
+            name + " = " + str(live / (name + ".pem")) + "\n"
+            for name in ("cert", "privkey", "chain", "fullchain")
+        )
+        + "[renewalparams]\nauthenticator = webroot\n"
+        + "server = https://acme-v02.api.letsencrypt.org/directory\n"
+        + "webroot_path = "
+        + str(BASE / "acme")
+        + ",\n[[webroot_map]]\n"
+        + DOMAIN
+        + " = "
+        + str(BASE / "acme")
+        + "\n"
+    )
     (certdir / "privkey1.pem").chmod(0o600)
     recipient = command(["age-keygen", "-y", str(BASE / "recovery-key")]).stdout.strip()
     settings = {
@@ -499,6 +525,11 @@ def main():
         TARGET, target_env, "restore", downloaded, "--identity", BASE / "recovery-key", check=False
     )
     assert second_restore.returncode != 0
+    restored_tls = ROOT / ".local/operations" / TARGET / "letsencrypt"
+    renewal_text = (restored_tls / "renewal" / (DOMAIN + ".conf")).read_text()
+    assert str(tls) not in renewal_text
+    assert str(restored_tls / "live" / DOMAIN / "cert.pem") in renewal_text
+    assert str(ROOT / ".local/operations" / TARGET / "acme") in renewal_text
     deployed = json.loads(ops(TARGET, target_env, "status").stdout)
     assert deployed["status"] == "ok"
     native = BASE / "native.json"
@@ -530,10 +561,11 @@ def main():
             "new independent project restores sessions/roles/grants/playlists/social/report/audit",
             "restored MP4/JPEG byte hashes, Range and private/hidden/revocation ACL",
             "pending processing job finishes after restore",
+            "Certbot renewal paths relocated after original TLS directory removal",
             "operator status includes disk, queue, workers, HTTP errors and TLS expiry",
         ],
     }
-    Path("/tmp/stage11-restore.json").write_text(json.dumps(report, indent=2) + "\n")
+    Path("/tmp/stage11-restore" + SUFFIX + ".json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report), flush=True)
 
 

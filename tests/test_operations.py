@@ -201,6 +201,7 @@ def test_unknown_backup_schema_refused_before_target_creation(tmp_path, monkeypa
         return ""
 
     monkeypatch.setattr(ops, "run", fake)
+    (tmp_path / "encrypted.age").write_bytes(b"encrypted fixture")
     with pytest.raises(ops.OpsError, match="unknown"):
         ctx.restore(tmp_path / "encrypted.age", tmp_path / "key")
     assert not ctx.env_file.exists()
@@ -340,3 +341,232 @@ def test_renew_reloads_only_after_certbot_success(tmp_path, monkeypatch, success
             ctx.tls(renew=True)
         assert len(events) == 1
     assert events[0][:2] == ("certbot", "renew")
+
+
+def renewal_file(tls, name="video.test"):
+    directory = tls / "renewal"
+    directory.mkdir(parents=True)
+    file = directory / (name + ".conf")
+    file.write_text(
+        "version = 2.9.0\narchive_dir = /lost/tls/archive/video.test\n"
+        "cert = /lost/tls/live/video.test/cert.pem\n"
+        "privkey = /lost/tls/live/video.test/privkey.pem\n"
+        "chain = /lost/tls/live/video.test/chain.pem\n"
+        "fullchain = /lost/tls/live/video.test/fullchain.pem\n"
+        "[renewalparams]\nauthenticator = webroot\naccount = keep-this-account\n"
+        "server = https://acme.example.test/directory\nwebroot_path = /lost/acme,\n"
+        "[[webroot_map]]\nvideo.test = /lost/acme\nwww.video.test = /lost/other\n"
+    )
+    return file
+
+
+def test_restore_relocates_all_certbot_paths_and_preserves_account(tmp_path):
+    tls = tmp_path / "new-tls"
+    webroot = tmp_path / "new-acme"
+    file = renewal_file(tls, "video.test-0001")
+    ops.relocate_certbot(tls, webroot)
+    text = file.read_text()
+    assert "/lost/" not in text
+    for name in ("cert", "privkey", "chain", "fullchain"):
+        assert str(tls / "live" / "video.test-0001" / (name + ".pem")) in text
+    assert str(tls / "archive" / "video.test-0001") in text
+    assert "account = keep-this-account" in text
+    assert "server = https://acme.example.test/directory" in text
+    assert f"webroot_path = {webroot}," in text
+    assert f"video.test = {webroot}" in text and f"www.video.test = {webroot}" in text
+    assert file.stat().st_mode & 0o777 == 0o600
+    once = text
+    ops.relocate_certbot(tls, webroot)
+    assert file.read_text() == once
+
+
+def test_invalid_renewal_configuration_is_not_partially_rewritten(tmp_path):
+    file = renewal_file(tmp_path / "tls")
+    file.write_text("broken line\n")
+    with pytest.raises(ops.OpsError, match="renewal configuration"):
+        ops.relocate_certbot(tmp_path / "tls", tmp_path / "acme")
+    assert file.read_text() == "broken line\n"
+
+
+@pytest.mark.parametrize("fresh", [True, False])
+@pytest.mark.parametrize("web_mode", [None, "production", "local", "acme"])
+def test_repeat_tls_renews_expired_certificate_without_replacing_live_https(
+    tmp_path, monkeypatch, fresh, web_mode
+):
+    ctx = context(tmp_path)
+    tls = tmp_path / "tls"
+    cert = tls / "live" / "video.example.com" / "fullchain.pem"
+    cert.parent.mkdir(parents=True)
+    cert.write_text("fixture; freshness checked by OpenSSL")
+    monkeypatch.setattr(
+        ctx,
+        "values",
+        lambda: {
+            "SITE_DOMAIN": "video.example.com",
+            "ACME_EMAIL": "ops@example.com",
+            "TLS_ROOT": str(tls),
+            "ACME_WEBROOT": str(tmp_path / "acme"),
+        },
+    )
+    monkeypatch.setattr(
+        ops.subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0 if fresh else 1)
+    )
+    monkeypatch.setattr(ctx, "web_mode", lambda: web_mode)
+    events = []
+    monkeypatch.setattr(ops, "run", lambda cmd, **kw: events.append(tuple(cmd)))
+    monkeypatch.setattr(ctx, "compose", lambda *a, **kw: events.append((a, kw.get("mode"))))
+    ctx.tls()
+    if fresh:
+        assert events == []
+    else:
+        assert any(e[:2] == ("certbot", "certonly") for e in events)
+        up = [e for e in events if isinstance(e[0], tuple) and e[0][0] == "up"]
+        assert bool(up) == (web_mode not in ("production", "acme"))
+        if web_mode == "production":
+            assert any(
+                isinstance(e[0], tuple) and e[0][-3:] == ("nginx", "-s", "reload") for e in events
+            )
+
+
+def test_failed_initial_tls_restores_previous_http_gateway(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    monkeypatch.setattr(
+        ctx,
+        "values",
+        lambda: {
+            "SITE_DOMAIN": "video.example.com",
+            "ACME_EMAIL": "ops@example.com",
+            "TLS_ROOT": str(tmp_path / "tls"),
+            "ACME_WEBROOT": str(tmp_path / "acme"),
+        },
+    )
+    monkeypatch.setattr(ctx, "web_mode", lambda: "local")
+    events = []
+    monkeypatch.setattr(ctx, "compose", lambda *a, **kw: events.append((a, kw.get("mode"))))
+
+    def unavailable(*args, **kw):
+        raise ops.OpsError("ACME unavailable")
+
+    monkeypatch.setattr(ops, "run", unavailable)
+    with pytest.raises(ops.OpsError):
+        ctx.tls()
+    assert events[-1][1] == "local" and events[-1][0][0] == "up"
+
+
+def test_backup_insufficient_space_refused_before_services_stop(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    ctx.env_file.write_text("fixture")
+    monkeypatch.setattr(ctx, "values", lambda: {"BACKUP_RECIPIENT": "fixture"})
+    monkeypatch.setattr(ops.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(ops, "run", lambda *a, **kw: "")
+    monkeypatch.setattr(ctx, "cid", lambda service: "fixture-app")
+    monkeypatch.setattr(ctx, "media_inventory", lambda container: 1000)
+    monkeypatch.setattr(ctx, "sql", lambda statement: "1000")
+    monkeypatch.setattr(ctx, "services", lambda: pytest.fail("must reject before downtime"))
+    monkeypatch.setattr(ops.shutil, "disk_usage", lambda path: SimpleNamespace(free=1024))
+    with pytest.raises(ops.OpsError, match="Insufficient snapshot space"):
+        ctx.backup(local_only=True, destination=tmp_path / "backups")
+    assert not list((tmp_path / "backups").glob("*.age"))
+
+
+def test_copy_stops_before_reserve_when_free_space_drops(tmp_path, monkeypatch):
+    from ops_storage import GuardedWriter, SpaceBudget
+
+    free = iter([2 * 1024**2, 900000])
+    monkeypatch.setattr(ops.shutil, "disk_usage", lambda path: SimpleNamespace(free=next(free)))
+    output = io.BytesIO()
+    writer = GuardedWriter(output, SpaceBudget(tmp_path, reserve=1024**2))
+    writer.write(b"a" * 100000)
+    with pytest.raises(ops.OpsError, match="reserve"):
+        writer.write(b"b" * 100000)
+    assert output.getvalue() == b"a" * 100000
+
+
+def test_archive_extraction_refuses_size_before_writing_payload(tmp_path, monkeypatch):
+    path = tmp_path / "bundle.tar"
+    envelope(path)
+    destination = tmp_path / "out"
+    destination.mkdir()
+    monkeypatch.setattr(ops.shutil, "disk_usage", lambda path: SimpleNamespace(free=0))
+    with pytest.raises(ops.OpsError, match="Insufficient snapshot space"):
+        ops.unpack_bundle(path, destination)
+    assert list(destination.iterdir()) == []
+
+
+@pytest.mark.parametrize("port", [-1, 0, 65536])
+def test_invalid_restore_port_does_not_create_target(tmp_path, port):
+    ctx = context(tmp_path)
+    with pytest.raises(ops.OpsError, match="ports"):
+        ctx.restore(tmp_path / "missing.age", tmp_path / "key", https_port=port)
+    assert not ctx.env_file.exists()
+
+
+def test_media_inventory_uses_container_when_docker_root_is_inaccessible(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    source = Path("/inaccessible-docker-volume")
+    real_is_dir = Path.is_dir
+
+    def is_dir(path):
+        if path == source:
+            raise PermissionError("Docker namespace")
+        return real_is_dir(path)
+
+    monkeypatch.setattr(Path, "is_dir", is_dir)
+    monkeypatch.setattr(
+        ops,
+        "run",
+        lambda *a, **kw: json.dumps(
+            [
+                {
+                    "Mounts": [{"Source": str(source), "Destination": "/data/media"}],
+                    "State": {"Running": True},
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(ctx, "compose", lambda *a, **kw: "123456")
+    assert ctx.media_inventory("fixture") == 123456
+
+
+def test_restore_failure_stops_remote_database_import_and_keeps_target_for_inspection(
+    tmp_path, monkeypatch
+):
+    ctx = context(tmp_path)
+    versions = tmp_path / "migrations/versions"
+    versions.mkdir(parents=True)
+    (versions / "0011.py").write_text("revision = '0011'\n")
+    bundle = tmp_path / "payload.tar"
+    envelope(bundle)
+    archive = tmp_path / "fixture.age"
+    archive.write_bytes(b"encrypted fixture")
+    events = []
+    monkeypatch.setattr(ctx, "values", lambda **kw: {})
+    monkeypatch.setattr(ctx, "require_volume_space", lambda *a: None)
+    monkeypatch.setattr(
+        ctx,
+        "config",
+        lambda: {
+            "services": {
+                "db": {"environment": {"POSTGRES_USER": "fixture", "POSTGRES_DB": "fixture"}}
+            }
+        },
+    )
+
+    def fake_run(command, **kwargs):
+        if command[0] == "age":
+            kwargs["stdout"].write(bundle.read_bytes())
+        return ""
+
+    def compose(*args, **kwargs):
+        events.append(args)
+        if "pg_restore" in args:
+            raise ops.OpsError("restore client disconnected")
+        return ""
+
+    monkeypatch.setattr(ops, "run", fake_run)
+    monkeypatch.setattr(ctx, "compose", compose)
+    with pytest.raises(ops.OpsError, match="disconnected"):
+        ctx.restore(archive, tmp_path / "key")
+    assert ctx.env_file.exists()
+    assert any(call[0] == "stop" and "db" in call for call in events)
+    assert not list(ctx.directory.glob("restore-*"))

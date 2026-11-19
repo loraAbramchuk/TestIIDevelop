@@ -6,9 +6,10 @@ const crypto=require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const path=require('node:path');
 (async()=>{
- const fixture=JSON.parse(fs.readFileSync('/tmp/stage11-dr/native.json','utf8'));
+ const suffix=process.env.STAGE11_TEST_SUFFIX||'';assert.ok(['','-fixes'].includes(suffix));
+ const fixture=JSON.parse(fs.readFileSync('/tmp/stage11-dr'+suffix+'/native.json','utf8'));
  assert.equal(fixture.base,'https://video.test:8450');
- const cert=path.resolve('.local/operations/stage11-restored/letsencrypt/live/video.test/fullchain.pem');
+ const cert=path.resolve('.local/operations/stage11-restored'+suffix+'/letsencrypt/live/video.test/fullchain.pem');
  const pem=execFileSync('openssl',['x509','-in',cert,'-pubkey','-noout']);
  const der=execFileSync('openssl',['pkey','-pubin','-outform','DER'],{input:pem});
  const pin=crypto.createHash('sha256').update(der).digest('base64');
@@ -45,11 +46,11 @@ const path=require('node:path');
   const guest=await browser.newContext();const tab=await guest.newPage();
   assert.equal((await tab.goto(fixture.base+'/watch/'+fixture.video_id)).status(),404);
   assert.deepEqual(errors,[]);
-  const logs=execFileSync('docker',['logs','--since',started,'stage11-restored-web-1'],{stdio:['ignore','pipe','ignore']}).toString();
+  const logs=execFileSync('docker',['logs','--since',started,'stage11-restored'+suffix+'-web-1'],{stdio:['ignore','pipe','ignore']}).toString();
   const entries=logs.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
   assert.ok(entries.some(row=>row.uri===`/api/videos/${fixture.video_id}/stream`));
   assert.ok(entries.every(row=>!row.uri.startsWith('/_protected_media/')));
   const report={result:'passed',checks:['HTTPS login and Secure __Host cookie after restore','native decoded frames and seeking','private video denied to guest','320/390/768/1440 layout','logs omit internal media storage paths'],playback};
-  fs.writeFileSync('/tmp/stage11-browser.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
+  fs.writeFileSync('/tmp/stage11-browser'+suffix+'.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -3,9 +3,11 @@
 
 import argparse
 import ast
+import configparser
 import contextlib
 import fcntl
 import hashlib
+import io
 import json
 import os
 import posixpath
@@ -23,16 +25,26 @@ from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from init_env import create_env
+from ops_storage import (
+    ARCHIVE_OVERHEAD,
+    DEFAULT_RESERVE,
+    GuardedReader,
+    GuardedWriter,
+    OpsError,
+    SpaceBudget,
+    stop_process,
+    stream_command,
+    tree_inventory,
+)
 
 WRITERS = ("web", "app", "worker", "upload-maintenance")
 PAYLOADS = {"config.env", "database.dump", "media.tar", "tls.tar"}
 
 
-class OpsError(Exception):
-    pass
-
-
 def run(command, *, stdin=None, stdout=None, binary=False, timeout=3600, check=True, env=None):
+    if isinstance(stdout, GuardedWriter) or isinstance(stdin, GuardedReader):
+        destination = stdout if isinstance(stdout, GuardedWriter) else None
+        return stream_command(command, destination, stdin=stdin, timeout=timeout, env=env)
     result = subprocess.run(
         command,
         stdin=stdin,
@@ -86,7 +98,7 @@ def safe_members(archive, *, links=False):
     return archive.getmembers()
 
 
-def unpack_bundle(path, destination):
+def unpack_bundle(path, destination, *, reserve=DEFAULT_RESERVE):
     with tarfile.open(path, "r:*") as archive:
         members = safe_members(archive)
         names = {m.name for m in members}
@@ -94,6 +106,8 @@ def unpack_bundle(path, destination):
             PAYLOADS | {"manifest.json"}
         ):
             raise OpsError("Unsupported backup contents")
+        budget = SpaceBudget(destination, reserve)
+        budget.require(sum(member.size for member in members))
         for member in members:
             if not member.isfile() or "/" in member.name:
                 raise OpsError("Backup envelope must contain regular files only")
@@ -101,7 +115,7 @@ def unpack_bundle(path, destination):
                 archive.extractfile(member) as source,
                 (destination / member.name).open("wb") as output,
             ):
-                shutil.copyfileobj(source, output)
+                shutil.copyfileobj(source, GuardedWriter(output, budget), length=1024**2)
             (destination / member.name).chmod(0o600)
     manifest = json.loads((destination / "manifest.json").read_text())
     if (
@@ -149,6 +163,44 @@ def append_setting(path, key, value):
         file.write(f"\n{key}={json.dumps(str(value), ensure_ascii=False)}\n")
 
 
+def relocate_certbot(tls, webroot):
+    """Rebase ConfigObj-compatible renewal files without changing ACME accounts."""
+    for file in sorted((tls / "renewal").glob("*.conf")):
+        if file.is_symlink():
+            raise OpsError("Renewal configuration must be a regular file")
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.optionxform = str
+        try:
+            parser.read_string("[certificate]\n" + file.read_text())
+            if not parser.has_section("renewalparams"):
+                raise ValueError("Missing renewal parameters")
+            name = file.stem
+            parser["certificate"]["archive_dir"] = str(tls / "archive" / name)
+            for key in ("cert", "privkey", "chain", "fullchain"):
+                parser["certificate"][key] = str(tls / "live" / name / (key + ".pem"))
+            params = parser["renewalparams"]
+            if params.get("authenticator") == "webroot":
+                params["webroot_path"] = str(webroot) + ","
+                if not parser.has_section("[webroot_map]"):
+                    parser.add_section("[webroot_map]")
+                for domain in parser["[webroot_map]"]:
+                    parser["[webroot_map]"][domain] = str(webroot)
+            output = io.StringIO()
+            parser.write(output)
+            text = output.getvalue().removeprefix("[certificate]\n")
+        except (configparser.Error, ValueError) as exc:
+            raise OpsError("Invalid Certbot renewal configuration") from exc
+        temporary = file.with_name(file.name + "." + uuid4().hex)
+        try:
+            with os.fdopen(
+                os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w"
+            ) as target:
+                target.write(text)
+            os.replace(temporary, file)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 class Operations:
     def __init__(self, args):
         self.args = args
@@ -188,9 +240,12 @@ class Operations:
     def config(self):
         return json.loads(self.compose("config", "--format", "json"))
 
-    def values(self):
+    def values(self, env_file=None):
         # Compose parses/interpolates .env; the resulting secrets stay in memory.
-        output = self.compose("config", "--environment", mode="local")
+        command = self.command(mode="local")
+        if env_file is not None:
+            command[command.index("--env-file") + 1] = str(env_file)
+        output = run(command + ["config", "--environment"])
         return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
 
     def state(self):
@@ -335,35 +390,76 @@ class Operations:
             statement,
         ).strip()
 
-    def encrypt(self, work, destination, recipient):
+    def encrypt(self, work, destination, recipient, *, reserve=DEFAULT_RESERVE):
         temporary = destination.with_suffix(destination.suffix + ".part")
-        process = None
+        budget = SpaceBudget(destination.parent, reserve)
+        # Two connected processes let us enforce reserve on age's output too.
+        producer = None
         try:
             with os.fdopen(
                 os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb"
             ) as output:
-                process = subprocess.Popen(
-                    ["age", "--encrypt", "--recipient", recipient],
-                    stdin=subprocess.PIPE,
-                    stdout=output,
+                producer = subprocess.Popen(
+                    [
+                        "tar",
+                        "--create",
+                        "--gzip",
+                        "--file=-",
+                        "--directory=" + str(work),
+                        "--",
+                        *sorted(file.name for file in work.iterdir()),
+                    ],
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
+                    start_new_session=True,
                 )
-                with tarfile.open(fileobj=process.stdin, mode="w|gz") as archive:
-                    for file in sorted(work.iterdir()):
-                        archive.add(file, arcname=file.name, recursive=False)
-                process.stdin.close()
-                process.stdin = None
-                _, error = process.communicate(timeout=3600)
-                if process.returncode:
-                    raise OpsError(
-                        "Backup encryption failed: " + error.decode(errors="replace")[:300]
-                    )
+                run(
+                    ["age", "--encrypt", "--recipient", recipient],
+                    stdin=producer.stdout,
+                    stdout=GuardedWriter(output, budget),
+                    binary=True,
+                )
+                producer.stdout.close()
+                producer.wait(timeout=30)
+                if producer.returncode:
+                    raise OpsError("Snapshot compression failed")
             os.replace(temporary, destination)
         finally:
-            if process is not None and process.poll() is None:
-                process.kill()
-                process.wait()
+            if producer is not None:
+                stop_process(producer)
+                producer.stdout.close()
+                producer.stderr.close()
             temporary.unlink(missing_ok=True)
+
+    def reserve(self, values):
+        return max(
+            int(values.get("MEDIA_MIN_FREE_BYTES", DEFAULT_RESERVE)),
+            int(values.get("BACKUP_MIN_FREE_BYTES", DEFAULT_RESERVE)),
+        )
+
+    def media_inventory(self, container):
+        data = json.loads(run(["docker", "inspect", container]))[0]
+        mount = next(m for m in data["Mounts"] if m["Destination"] == "/data/media")
+        source = Path(mount["Source"])
+        try:
+            if source.is_dir() and os.access(source, os.R_OK | os.X_OK):
+                return tree_inventory(source)
+        except PermissionError:
+            pass
+        if not data["State"]["Running"]:
+            raise OpsError("Inspect stopped media on the Docker host before backup")
+        # The same conservative inventory when Docker's root is in another namespace.
+        code = (
+            "import os,json;root='/data/media';n=1;size=0;"
+            "\nfor directory,names,files in os.walk(root):"
+            "\n n+=len(names)+len(files)"
+            "\n for name in names+files:"
+            "\n  p=os.path.join(directory,name)"
+            "\n  if os.path.islink(p):raise RuntimeError('Unsupported media link')"
+            "\n  if os.path.isfile(p):size+=os.stat(p).st_size"
+            "\nprint(size+n*8192)"
+        )
+        return int(self.compose("exec", "-T", "app", "python", "-c", code))
 
     def ship(self, archive, values=None):
         values = values or self.values()
@@ -423,6 +519,8 @@ class Operations:
         recipient = recipient or values.get("BACKUP_RECIPIENT")
         if not recipient:
             raise OpsError("Configure an age recipient before backup")
+        if not shutil.which("tar"):
+            raise OpsError("Install tar before creating backups")
         if not shutil.which("age"):
             raise OpsError("Install age before creating backups")
         with open(os.devnull, "rb") as empty:
@@ -441,6 +539,23 @@ class Operations:
         destination.mkdir(mode=0o700, parents=True, exist_ok=True)
         if destination.stat().st_mode & 0o077:
             raise OpsError("Backup directory must be private (0700)")
+        reserve = self.reserve(values)
+        budget = SpaceBudget(destination, reserve)
+        container = self.cid("app")
+        if not container:
+            raise OpsError("Application container is needed for a consistent media snapshot")
+        media_bytes = self.media_inventory(container)
+        database_bytes = int(self.sql("SELECT pg_database_size(current_database())"))
+        tls_bytes = 0
+        if self.args.production:
+            tls_bytes = sum(
+                p.stat().st_size + 8192
+                for p in Path(values.get("TLS_ROOT", self.directory / "letsencrypt")).rglob("*")
+                if p.is_file()
+            )
+        estimate = media_bytes + database_bytes * 2 + tls_bytes + ARCHIVE_OVERHEAD
+        # dump/media snapshot and encrypted output coexist until finally cleanup.
+        budget.require(estimate * 2)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         archive = destination / f"video-{self.project}-{stamp}-{uuid4().hex[:8]}.tar.age"
         with (
@@ -466,19 +581,26 @@ class Operations:
                     "--format=custom",
                     "--no-owner",
                     "--no-acl",
-                    stdout=file,
+                    stdout=GuardedWriter(file, budget),
                     binary=True,
                 )
             container = self.cid("app")
             if not container:
                 raise OpsError("Application container is needed for a consistent media snapshot")
             with (work / "media.tar").open("wb") as file:
-                run(["docker", "cp", f"{container}:/data/media/.", "-"], stdout=file, binary=True)
+                run(
+                    ["docker", "cp", f"{container}:/data/media/.", "-"],
+                    stdout=GuardedWriter(file, budget),
+                    binary=True,
+                )
             with tarfile.open(work / "media.tar") as tar:
                 safe_members(tar)
             if self.args.production:
                 tls = Path(values.get("TLS_ROOT", self.directory / "letsencrypt"))
-                with tarfile.open(work / "tls.tar", "w") as tar:
+                with (
+                    (work / "tls.tar").open("wb") as output,
+                    tarfile.open(fileobj=GuardedWriter(output, budget), mode="w|") as tar,
+                ):
                     for child in sorted(tls.iterdir()):
                         tar.add(child, arcname=child.name)
                 with tarfile.open(work / "tls.tar") as tar:
@@ -490,6 +612,8 @@ class Operations:
             manifest = {
                 "format": 1,
                 "postgres_major": 17,
+                "database_bytes": database_bytes,
+                "media_bytes": media_bytes,
                 "alembic_revision": revision,
                 "created_at": datetime.now(UTC).isoformat(),
                 "deployed_revision": self.state().get("deployed_revision"),
@@ -500,7 +624,7 @@ class Operations:
                 "files": files,
             }
             (work / "manifest.json").write_text(json.dumps(manifest, sort_keys=True))
-            self.encrypt(work, archive, recipient)
+            self.encrypt(work, archive, recipient, reserve=reserve)
         remote = None if local_only else self.ship(archive, values)
         self.save(
             last_backup={
@@ -526,6 +650,11 @@ class Operations:
 
     def restore(self, archive, identity, *, http_port=None, https_port=None, public_http_port=None):
         # Refuse even stopped containers/volumes: never guess whether a target holds valuable data.
+        if any(
+            port is not None and not 1 <= port <= 65535
+            for port in (http_port, https_port, public_http_port)
+        ):
+            raise OpsError("Restore ports must be between 1 and 65535")
         if self.env_file.exists():
             raise OpsError("Restore requires a new environment file and empty target")
         for command in (
@@ -548,18 +677,21 @@ class Operations:
         ):
             if run(command).strip():
                 raise OpsError("Restore target already contains containers or volumes")
+        reserve = DEFAULT_RESERVE
+        budget = SpaceBudget(self.directory, reserve)
+        budget.require(archive.stat().st_size)
         with tempfile.TemporaryDirectory(prefix="restore-", dir=self.directory) as folder:
             work = Path(folder)
             work.chmod(0o700)
             with (work / "bundle.tar").open("wb") as file:
                 run(
                     ["age", "--decrypt", "--identity", str(identity), str(archive)],
-                    stdout=file,
+                    stdout=GuardedWriter(file, budget),
                     binary=True,
                 )
             payload = work / "payload"
             payload.mkdir(mode=0o700)
-            manifest = unpack_bundle(work / "bundle.tar", payload)
+            manifest = unpack_bundle(work / "bundle.tar", payload, reserve=reserve)
             revisions = set()
             for file in (self.root / "migrations" / "versions").glob("*.py"):
                 for node in ast.parse(file.read_text()).body:
@@ -579,6 +711,16 @@ class Operations:
                 )
             if bool(manifest["production"]) != self.args.production:
                 raise OpsError("Restore mode must match backup mode")
+            reserve = self.reserve(self.values(env_file=payload / "config.env"))
+            budget = SpaceBudget(self.directory, reserve)
+            with tarfile.open(payload / "media.tar") as media:
+                media_size = sum(member.size + 8192 for member in safe_members(media))
+            db_size = manifest.get("database_bytes", (payload / "database.dump").stat().st_size * 4)
+            if type(db_size) is not int or db_size < 0:
+                raise OpsError("Invalid database size in snapshot")
+            required = media_size + db_size * 2 + ARCHIVE_OVERHEAD
+            tls_size = (payload / "tls.tar").stat().st_size if manifest["production"] else 0
+            budget.require(required + tls_size)
             self.env_file.parent.mkdir(parents=True, exist_ok=True)
             with os.fdopen(
                 os.open(self.env_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb"
@@ -598,11 +740,19 @@ class Operations:
                     tar.extractall(tls, filter="data")
                 acme = self.directory / "acme"
                 acme.mkdir(mode=0o755)
+                relocate_certbot(tls, acme)
                 append_setting(self.env_file, "TLS_ROOT", str(tls))
                 append_setting(self.env_file, "ACME_WEBROOT", str(acme))
             try:
                 self.compose("up", "--detach", "--wait", "--wait-timeout", "180", "db")
                 db = self.config()["services"]["db"]["environment"]
+                budget.require(required)
+                self.require_volume_space(required, reserve)
+
+                def guard_target():
+                    budget.require()
+                    self.require_volume_space(0, reserve)
+
                 with (payload / "database.dump").open("rb") as file:
                     self.compose(
                         "exec",
@@ -619,21 +769,58 @@ class Operations:
                         "--if-exists",
                         "--no-owner",
                         "--no-acl",
-                        stdin=file,
+                        stdin=GuardedReader(file, guard_target),
                         binary=True,
                     )
                 self.compose("create", "--no-build", "app")
                 with (payload / "media.tar").open("rb") as file:
                     run(
                         ["docker", "cp", "-a", "-", f"{self.cid('app')}:/data/media"],
-                        stdin=file,
+                        stdin=GuardedReader(file, guard_target),
                         binary=True,
                     )
                 self.start(build=False)
             except BaseException:
-                self.compose("stop", *WRITERS, check=False)
+                # Killing docker exec's client does not guarantee remote pg_restore exits.
+                # Stop the new DB as well so an import cannot keep writing after reserve failure.
+                self.compose("stop", "--timeout", "30", *WRITERS, "db", check=False)
                 raise
         print("Restore completed; database, media and private grants are available")
+
+    def require_volume_space(self, required, reserve):
+        output = self.compose(
+            "exec", "-T", "db", "df", "-P", "-B1", "/var/lib/postgresql/data", timeout=30
+        )
+        free = int(output.splitlines()[-1].split()[3])
+        if free < required + reserve:
+            raise OpsError(
+                f"Insufficient Docker volume space: need {required} bytes plus "
+                f"{reserve} reserve; available {free}"
+            )
+
+    def web_mode(self):
+        container = self.cid("web")
+        if not container:
+            return None
+        data = json.loads(run(["docker", "inspect", container]))[0]
+        if not data["State"]["Running"]:
+            return None
+        source = next(
+            (
+                m["Source"]
+                for m in data["Mounts"]
+                if m["Destination"] == "/etc/nginx/templates/default.conf.template"
+            ),
+            "",
+        )
+        for mode, name in (
+            ("production", "nginx.production.conf.template"),
+            ("acme", "nginx.acme.conf.template"),
+            ("local", "nginx.conf.template"),
+        ):
+            if source == str(self.root / "deploy" / name):
+                return mode
+        raise OpsError("Unknown running web configuration; refusing to replace it")
 
     def tls(self, *, renew=False):
         values = self.values()
@@ -658,21 +845,47 @@ class Operations:
             append_setting(self.env_file, "ACME_WEBROOT", str(webroot))
         certificate = tls / "live" / domain / "fullchain.pem"
         if not renew and certificate.exists():
-            run(["openssl", "x509", "-in", str(certificate), "-noout", "-checkend", "86400"])
-            return
-        if not renew:
-            self.compose("build", "web", mode="acme")
-            self.compose(
-                "up",
-                "--no-build",
-                "--no-deps",
-                "--detach",
-                "--wait",
-                "--wait-timeout",
-                "60",
-                "web",
-                mode="acme",
+            check = subprocess.run(
+                ["openssl", "x509", "-in", str(certificate), "-noout", "-checkend", "86400"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
             )
+            if check.returncode == 0:
+                return
+        previous_mode = None
+        bootstrapped = False
+        if not renew:
+            previous_mode = self.web_mode()
+            if previous_mode not in ("production", "acme"):
+                self.compose("build", "web", mode="acme")
+                try:
+                    self.compose(
+                        "up",
+                        "--no-build",
+                        "--no-deps",
+                        "--detach",
+                        "--wait",
+                        "--wait-timeout",
+                        "60",
+                        "web",
+                        mode="acme",
+                    )
+                except BaseException:
+                    if previous_mode:
+                        self.compose(
+                            "up",
+                            "--no-deps",
+                            "--no-build",
+                            "--detach",
+                            "--wait",
+                            "--wait-timeout",
+                            "180",
+                            "web",
+                            mode=previous_mode,
+                        )
+                    raise
+                bootstrapped = True
         args = [
             "certbot",
             "renew" if renew else "certonly",
@@ -691,8 +904,23 @@ class Operations:
         ]
         if not renew:
             args += ["--agree-tos", "--email", email, "-d", domain, "--keep-until-expiring"]
-        run(args)
-        if renew:
+        try:
+            run(args)
+        except BaseException:
+            if bootstrapped and previous_mode:
+                self.compose(
+                    "up",
+                    "--no-deps",
+                    "--no-build",
+                    "--detach",
+                    "--wait",
+                    "--wait-timeout",
+                    "180",
+                    "web",
+                    mode=previous_mode,
+                )
+            raise
+        if renew or previous_mode == "production":
             self.compose("exec", "-T", "web", "nginx", "-t")
             self.compose("exec", "-T", "web", "nginx", "-s", "reload")
         print("TLS configuration ready")
