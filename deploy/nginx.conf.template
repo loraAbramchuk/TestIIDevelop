@@ -6,55 +6,18 @@ upstream video_api {
     server app:8000 resolve;
 }
 
+# Log the original public path, without query or X-Accel storage keys.
+map $request_uri $video_request_path {
+    ~^([^?]*) $1;
+    default "";
+}
+
+log_format video_ops escape=json '{"time":"$time_iso8601","method":"$request_method","uri":"$video_request_path","status":$status,"bytes":$body_bytes_sent,"duration":$request_time}';
+# HTTP failures are counted in the structured log; omit request-bearing upstream errors.
+error_log /var/log/nginx/error.log crit;
+
 server {
     listen 80;
     server_name _;
-    server_tokens off;
-    client_max_body_size 1m;
-    proxy_connect_timeout 3s;
-    proxy_hide_header X-Content-Type-Options;
-    add_header X-Content-Type-Options nosniff always;
-
-    location ~ "^/api/videos/[0-9a-fA-F-]{36}/content$" {
-        client_max_body_size ${MAX_UPLOAD_BYTES};
-        client_body_timeout ${UPLOAD_IDLE_TIMEOUT_SECONDS}s;
-        proxy_request_buffering off;
-        proxy_buffering off;
-        proxy_http_version 1.1;
-        proxy_read_timeout ${UPLOAD_TIMEOUT_SECONDS}s;
-        proxy_send_timeout ${UPLOAD_IDLE_TIMEOUT_SECONDS}s;
-        proxy_pass http://video_api;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location / {
-        proxy_pass http://video_api;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Only an ACL-checked X-Accel-Redirect can enter this location.
-    location ~ "^/_protected_media/([0-9a-f]{32})/(playback[.]mp4|thumbnail[.]jpg)$" {
-        internal;
-        alias /data/media/processing/$1/$2;
-        disable_symlinks on;
-        sendfile on;
-        max_ranges 1;
-        etag off;
-        if_modified_since off;
-        open_file_cache off;
-        add_header Cache-Control "private, no-store" always;
-        add_header Vary Cookie always;
-        # Range filtering runs headers again for 416; keep the initial nosniff once.
-        add_header X-Content-Type-Options nosniff;
-    }
-
-    # No fallback path may serve sources, temporary files or processing locks.
-    location /_protected_media/ {
-        internal;
-        return 404;
-    }
+    include /etc/nginx/conf.d/includes/video-locations.conf;
 }
