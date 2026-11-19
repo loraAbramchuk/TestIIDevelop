@@ -14,7 +14,7 @@ const fs=require('node:fs');
   const watch=base+'/watch/'+fixture.videos[0];
   await page.goto(base+'/');assert.equal(await page.locator('.video-card').count(),6);
   assert.equal(await page.locator('.card-duration').first().textContent(),'0:02');
-  assert.ok(await page.locator('.card-preview img').first().evaluate(img=>img.complete&&img.naturalWidth>0));
+  await page.waitForFunction(()=>{const img=document.querySelector('.card-preview img');return img?.complete&&img.naturalWidth>0;},null,{timeout:15000});
   await page.screenshot({path:'/tmp/frontend-yt/home-desktop.png',fullPage:true});
   await page.locator('#menu-toggle').click();assert.equal(await page.locator('#sidebar').evaluate(n=>n.inert),true);
   await page.locator('#menu-toggle').click();assert.equal(await page.locator('#sidebar').evaluate(n=>n.inert),false);

@@ -111,6 +111,7 @@ if (uploadForm) {
     reportError('');
     // Keep metadata stable while the request is active; retries update the same card.
     const metadata = Object.fromEntries(fields.map(field => [field.name, field.value]));
+    let transferStarted = false;
     updateControls();
     try {
       status.textContent = 'Подготовка загрузки…';
@@ -121,9 +122,7 @@ if (uploadForm) {
         uploadForm.dataset.videoId = video.id;
       }
       showCard();
-      const csrfResponse = await fetch('/api/auth/csrf', {credentials: 'same-origin', cache: 'no-store'});
-      const csrf = await csrfResponse.json();
-      if (!csrfResponse.ok || !csrf.csrf_token) throw new Error('Обновите страницу и войдите в аккаунт.');
+      const csrf = await apiRead('/api/auth/csrf', data => typeof data?.csrf_token === 'string' && data.csrf_token.length > 0);
       await new Promise((resolve, reject) => {
         xhr = new XMLHttpRequest();
         xhr.open('PUT', `/api/videos/${uploadForm.dataset.videoId}/content`);
@@ -146,6 +145,7 @@ if (uploadForm) {
         progress.hidden = false;
         progress.value = 0;
         cancel.hidden = false;
+        transferStarted = true;
         xhr.send(file);
       });
       renderStatus({processing_status: 'processing'});
@@ -153,7 +153,8 @@ if (uploadForm) {
       progress.value = 100;
     } catch (failure) {
       error.textContent = failure instanceof TypeError ? 'Ошибка соединения. Проверьте статус и повторите попытку.' : failure.message;
-      if (uploadForm.dataset.videoId) {
+      if (!transferStarted) status.textContent = 'Подготовка загрузки не завершена. Повторите попытку.';
+      if (transferStarted && uploadForm.dataset.videoId) {
         try { await refreshStatus(); } catch { /* Keep the original upload error visible. */ }
       }
     } finally {

@@ -45,9 +45,7 @@ if (grantList) {
     for (const name of ['limit', 'cursor']) {
       if (page.searchParams.has(name)) url.searchParams.set(name, page.searchParams.get(name));
     }
-    const response = await fetch(url, {credentials: 'same-origin', cache: 'no-store'});
-    if (!response.ok) throw new Error('Не удалось обновить список разрешений. Проверьте соединение и доступ к видео.');
-    const data = await response.json();
+    const data = await apiRead(url, data => Array.isArray(data?.items) && data.items.every(grant => typeof grant?.user_id === 'string') && (data.next_cursor === null || typeof data.next_cursor === 'string'));
     const rows = document.createDocumentFragment();
     for (const grant of data.items) {
       const row = document.createElement('li');
@@ -109,7 +107,7 @@ if (grantList) {
     if (busy) return;
     setBusy(true); error.textContent = '';
     try { await refreshGrants(); }
-    catch { error.textContent = 'Не удалось обновить список разрешений. Повторите попытку.'; }
+    catch (failure) { error.textContent = failure instanceof TypeError ? 'Не удалось обновить список разрешений. Повторите попытку.' : failure.message; }
     finally { setBusy(false); }
   });
 }
