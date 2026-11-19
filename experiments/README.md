@@ -612,3 +612,33 @@ STAGE11_TEST_SUFFIX=-fixes node experiments/restored_playback_probe.cjs
 при импорте и отказ до запуска при достижении резерва. Проверки preflight/изменения
 свободного места, извлечения архива и переноса/истечения сертификатов — в
 `tests/test_operations.py`. Тесты не расходуют весь реальный диск приложения.
+
+
+### Новый интерфейс
+
+Используйте отдельный backend на `127.0.0.1:8012`, Nginx на **127.0.0.1:8098**,
+пустую БД `frontend_yt_preview` (миграции до head), worker и
+`MEDIA_ROOT=/tmp/frontend-yt/media`. Пароль/host/port тестовой PostgreSQL передаются
+обычными переменными окружения. Основной сервер/его БД не используются.
+Nginx должен проксировать API/страницы в этот backend и защищённый media location
+из deploy/video-locations.conf.template — в тот же fixture media root.
+
+```bash
+# С теми же DB_*/POSTGRES_*/MEDIA_ROOT, что у тестового backend/worker:
+PYTHONPATH=. uv run --locked python experiments/frontend_fixture.py
+FRONTEND_TEST_BASE_URL=http://127.0.0.1:8098 node experiments/frontend_browser_probe.cjs
+```
+
+Фикстура создаёт три роли, шесть обработанных синтетических публичных видео,
+приватный ролик и плейлист. Отказывается от другого имени БД/media root и непустой
+фикстуры. Пароль генерируется случайно и сохраняется только в
+`/tmp/frontend-yt/accounts.json` (0600); не добавляйте его в Git.
+При host-Python + container-Nginx различаются UID: chmod применяется **только к
+синтетическому fixture media**, чтобы Nginx прочитал производные файлы. В штатном
+Compose app/worker/Nginx используют согласованные UID; прав production storage
+эта проверка не меняет.
+
+Проба проверяет реальное воспроизведение, responsive/sidebar/keyboard, роли,
+авторизацию, likes/comments/subscriptions, перестановку плейлиста, изменение
+канала, регистрацию Unicode и мобильную загрузку. Файл отчёта и снимки находятся
+в `/tmp/frontend-yt`; подробности в docs/verification/frontend.md.

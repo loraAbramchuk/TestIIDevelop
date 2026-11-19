@@ -31,6 +31,9 @@ if (channelProfile) {
       for (const label of document.querySelectorAll('[data-channel-label]')) {
         if (label.dataset.channelId === channel.id) label.textContent = channel.name;
       }
+      for (const avatar of document.querySelectorAll('[data-channel-avatar]')) {
+        if (avatar.dataset.channelId === channel.id) avatar.textContent = [...channel.name][0].toUpperCase();
+      }
       document.getElementById('channel-description').textContent = channel.description;
       form.elements.name.value = channel.name;
       form.elements.description.value = channel.description;

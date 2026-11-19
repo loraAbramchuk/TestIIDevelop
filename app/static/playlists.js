@@ -93,7 +93,10 @@
       const image = row.querySelector('img'); image.src = video.thumbnail_url; image.alt = 'Превью: ' + video.title;
       const title = row.querySelector('.card-title'); title.href = '/watch/' + video.id; title.textContent = video.title;
       const author = row.querySelector('.card-author'); author.href = '/channels/' + video.author.id; author.textContent = video.author.name;
-      row.querySelector('.hint').textContent = `${video.duration_seconds.toFixed(1)} с${video.visibility === 'private' ? ' · Приватное видео' : ''}`;
+      row.querySelector('.card-avatar').textContent = [...video.author.name][0].toUpperCase();
+      const seconds = Math.max(1, Math.ceil(video.duration_seconds)), minutes = Math.floor(seconds / 60);
+      row.querySelector('.card-duration').textContent = (minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}` : String(minutes)) + ':' + String(seconds % 60).padStart(2, '0');
+      row.querySelector('.hint').textContent = new Date(video.created_at).toLocaleDateString('ru-RU') + (video.visibility === 'private' ? ' · Приватное видео' : '');
       row.querySelector('.playlist-actions').hidden = !canManage;
       grid.append(fragment); known.add(video.id);
     }

@@ -1,13 +1,25 @@
 {% extends "base.html" %}
 {% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script>{% endblock %}
 {% block content %}
-  <h1>Видео</h1>
+  <div class="feed-toolbar">
+    <nav class="feed-tabs" aria-label="Разделы ленты"><a class="active" href="/" aria-current="page">Все видео</a><a href="/subscriptions">Из подписок</a><a href="/my-playlists">Ваши плейлисты</a></nav>
+    <span class="feed-note">Находите то, что интересно вам</span>
+  </div>
+  <div class="page-heading"><h1>Главная</h1><p>Свежие видео авторов</p></div>
   {% if page['items'] %}{% include "video_grid.html" %}{% else %}
-  <section class="empty" aria-labelledby="empty-title">
-    <div class="play" aria-hidden="true">▶</div>
+  <section class="empty home-empty" aria-labelledby="empty-title">
+    <div class="empty-visual" aria-hidden="true"><span class="visual-card visual-card-back"></span><span class="visual-card visual-card-front"><span class="visual-play"><svg viewBox="0 0 20 20" width="18" height="18"><path d="m7 4 9 6-9 6Z" fill="currentColor"/></svg></span><span class="visual-line"></span><span class="visual-line short"></span></span><span class="visual-spark spark-one">+</span><span class="visual-spark spark-two">+</span></div>
+    <span class="eyebrow">Каждая история начинается с первого кадра</span>
     <h2 id="empty-title">Пока нет видео</h2>
-    <p>Здесь появятся новые видео авторов.</p>
+    <p>Здесь будут появляться видео авторов.<br>Загрузите первое и задайте начало своей истории.</p>
+    <a class="button primary" href="/upload">{{ icon('plus') }} Загрузить видео</a>
+    {% if not user %}<a class="empty-secondary" href="/register">Сначала создать аккаунт {{ icon('arrow') }}</a>{% endif %}
   </section>
+  <div class="getting-started" aria-label="Возможности платформы">
+    <a href="/my-channel"><span class="feature-icon">{{ icon('channel') }}</span><div><h3>Свой канал</h3><p>Ваши видео в одном месте</p></div>{{ icon('arrow') }}</a>
+    <a href="/studio"><span class="feature-icon">{{ icon('lock') }}</span><div><h3>Ваш круг зрителей</h3><p>Делитесь со всеми или по приглашению</p></div>{{ icon('arrow') }}</a>
+    <a href="/my-playlists"><span class="feature-icon">{{ icon('playlist') }}</span><div><h3>Всё по полочкам</h3><p>Собирайте видео в плейлисты</p></div>{{ icon('arrow') }}</a>
+  </div>
   {% endif %}
-  {% if page.next_cursor %}<p><a class="next-page" href="/?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a></p>{% endif %}
+  {% if page.next_cursor %}<p class="pagination"><a class="next-page" href="/?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница {{ icon('arrow') }}</a></p>{% endif %}
 {% endblock %}

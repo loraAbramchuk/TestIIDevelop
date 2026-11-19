@@ -3,7 +3,7 @@
 {% block content %}
   <section class="auth-card">
     <h1>{{ 'Создать аккаунт' if register else 'Войти' }}</h1>
-    <form id="auth-form" data-action="{{ 'register' if register else 'login' }}" data-next="{{ next_path }}">
+    <form id="auth-form" method="post" data-action="{{ 'register' if register else 'login' }}" data-next="{{ next_path }}">
       {% if register %}
         <label for="display_name">Имя</label>
         <input id="display_name" name="display_name" autocomplete="nickname" required maxlength="100">
