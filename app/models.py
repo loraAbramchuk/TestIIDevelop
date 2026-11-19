@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -12,6 +12,8 @@ class User(Base):
 
     __tablename__ = "users"
     __table_args__ = (
+        Index("ix_users_page", "created_at", "id"),
+        Index("ix_users_role_page", "role", "created_at", "id"),
         CheckConstraint("role IN ('user', 'moderator', 'admin')", name="valid_role"),
         CheckConstraint("email = lower(email)", name="email_lowercase"),
     )

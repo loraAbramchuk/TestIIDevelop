@@ -482,3 +482,63 @@ docker compose -p stage9-verify -f compose.yaml stop
 `/tmp/stage9-recovery-conflict-390.png`; результаты входят в
 `/tmp/stage9-browser.json`. Модуль завершает проверку удалением тестового
 публичного видео, поэтому использовать его можно только в изолированном сценарии.
+
+## Администрирование: этап 10
+
+Браузерная проба использует отдельную БД `stage10_browser` и приложение на
+**localhost:8097**, Playwright/Chromium и `.venv`. Она отказывается работать на
+другом URL или без POSTGRES_DB=stage10_browser или stage10_fixes_browser. Пример с отдельной dev-БД:
+
+```bash
+# На отдельном экземпляре PostgreSQL, не в production:
+docker compose exec -T db createdb -U video stage10_browser
+POSTGRES_DB=stage10_browser uv run --locked alembic upgrade head
+POSTGRES_DB=stage10_browser MEDIA_ROOT=/tmp/stage10-browser-media \
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8097
+# В другом терминале с теми же DB_HOST/DB_PORT/POSTGRES_USER/POSTGRES_PASSWORD:
+POSTGRES_DB=stage10_browser node experiments/administration_browser_probe.cjs
+DOCS_TEST_BASE_URL=http://127.0.0.1:8097 node experiments/docs_browser_probe.cjs
+```
+
+CLI bootstrap вызывается настоящим кодом с паролем через stdin тестового адаптера,
+без пароля в аргументах или выводе. Далее роли меняются только рабочими API/UI.
+Проба создаёт admin, двух пользователей и синтетические private/hidden объекты
+для проверки отказа доступа. Проверяет поиск/пагинацию, роль текущей сессии,
+последнего admin, self-demotion, stale role и потерю прав в открытой панели,
+malformed/потерянный ответ после commit/GET 503, сохранение текста, закрытый аудит,
+XSS и 320–1440 px. Требует свежую БД: повтор добавляет ещё bootstrap admin,
+и проверка единственного администратора уже не будет корректной.
+Артефакты: `/tmp/stage10-browser.json`, `/tmp/stage10-users-390.png`.
+
+Миграция проверяется только на пустой выделенной БД с суффиксом `_probe`:
+
+```bash
+docker compose exec -T db createdb -U video stage10_administration_probe
+POSTGRES_DB=stage10_administration_probe uv run --locked python experiments/administration_migration_probe.py
+```
+
+Проба создаёт прежние users/roles/password_hash/sessions/channels/videos/grants,
+плейлист/элемент, лайк/комментарий, жалобу и событие аудита на схеме 0010.
+Сравнивает все строки public/video_queue и хеши файлов после upgrade, repeat,
+downgrade/re-upgrade. Старая admin session использует новый список, private
+остаётся закрытым гостю, обе истории разделены. Отчёт `/tmp/stage10-migration.json`.
+Downgrade удаляет только два индекса; прямой возврат старого кода требует
+сохранить ограничения доступа к истории ролей.
+
+
+### Восстановление администрирования после ревью
+
+Основной `administration_browser_probe.cjs` вызывает
+`administration_recovery_browser_probe.cjs` на тех же аккаунтах. Для повторения
+можно использовать свежую БД `stage10_fixes_browser` вместо `stage10_browser`
+(одинаковая настройка сервера и клиента, порт строго 8097). Дополнительные
+регистрации не нужны. Модуль проверяет сходимость выбранной роли и последующее
+обновление из другой вкладки, сохранение настоящего черновика, реальный CSRF
+403 с прежней ролью admin, ошибки проверки сессии и ручное восстановление.
+Он действительно ожидает четыре 15-секундных таймаута: PATCH до выполнения,
+PATCH после commit с потерянным ответом, GET карточки, GET csrf. Ещё один таймаут
+проверяет локальный HTTP-сервер с полученными заголовками и незавершённым JSON.
+Сервер открывает случайный loopback-порт только на время проверки и закрывает
+сокеты после завершения. Результаты включены в `/tmp/stage10-browser.json`.
+Полная браузерная проба занимает больше минуты; PATCH после неопределённого
+результата автоматически не повторяется.
