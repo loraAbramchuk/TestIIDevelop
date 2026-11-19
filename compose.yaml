@@ -1,8 +1,13 @@
 name: video-platform
 
 x-app: &app
-  image: video-platform-app:local
+  image: ${APP_IMAGE:-video-platform-app:local}
   build: .
+  logging: &bounded-logs
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
   environment:
     DB_HOST: db
     POSTGRES_DB: ${POSTGRES_DB:-video}
@@ -53,6 +58,7 @@ x-app: &app
 services:
   db:
     image: postgres:17-bookworm
+    logging: *bounded-logs
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-video}
       POSTGRES_USER: ${POSTGRES_USER:-video}
@@ -77,7 +83,7 @@ services:
   app:
     <<: *app
     # Only Nginx is externally reachable; it replaces incoming forwarded headers.
-    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*"]
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*", --no-access-log]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -121,19 +127,23 @@ services:
     restart: unless-stopped
 
   web:
-    image: video-platform-web:local
+    logging: *bounded-logs
+    image: ${WEB_IMAGE:-video-platform-web:local}
     build:
       context: .
       dockerfile: deploy/Dockerfile.nginx
     ports:
       - "127.0.0.1:${HTTP_PORT:-8080}:80"
     environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      HSTS_HEADER: ""
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-1073741824}
       UPLOAD_IDLE_TIMEOUT_SECONDS: ${UPLOAD_IDLE_TIMEOUT_SECONDS:-60}
       UPLOAD_TIMEOUT_SECONDS: ${UPLOAD_TIMEOUT_SECONDS:-3600}
-      NGINX_ENVSUBST_FILTER: ^(MAX_UPLOAD_BYTES|UPLOAD_IDLE_TIMEOUT_SECONDS|UPLOAD_TIMEOUT_SECONDS)$$
+      NGINX_ENVSUBST_FILTER: ^(MAX_UPLOAD_BYTES|UPLOAD_IDLE_TIMEOUT_SECONDS|UPLOAD_TIMEOUT_SECONDS|HSTS_HEADER|SITE_DOMAIN|PUBLIC_HTTPS_PORT)$$
     volumes:
       - ./deploy/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/video-locations.conf.template:/etc/nginx/templates/includes/video-locations.conf.template:ro
       - media:/data/media:ro
     depends_on:
       app:

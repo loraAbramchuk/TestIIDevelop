@@ -542,3 +542,73 @@ PATCH после commit с потерянным ответом, GET карточ
 сокеты после завершения. Результаты включены в `/tmp/stage10-browser.json`.
 Полная браузерная проба занимает больше минуты; PATCH после неопределённого
 результата автоматически не повторяется.
+
+### Этап 11: зашифрованная копия и восстановление после потери источника
+
+`deployment_restore_probe.py` разрушает **только свои** проекты `stage11-source`
+и `stage11-restored`, включая исходные volumes/env/TLS и локальную копию. Нужны
+предварительно собранные текущие app/web images, age/age-keygen, SSH fixture и
+образец `/tmp/stage1-media/h264-aac.mp4`. Основные volumes приложения не используются.
+
+Для повторения подготовьте приватный `/tmp/stage11-dr` (0700): `recovery-key`
+от `age-keygen`, `ssh-key` (0600) и `known_hosts` с ключом выделенного SSH-сервера
+на **127.0.0.1:22228**. На сервере разрешён только этот ключ для `root`, есть
+пустой постоянный каталог `/backups`. В облачной проверке использован отдельный
+Ubuntu SSH-контейнер с volume; это моделирует внешний сервер, но не другую машину.
+Не используйте реальные ключи/сертификаты или существующие проекты этих имён.
+
+```bash
+STAGE11_TEST_PROJECT=stage11-source uv run --locked python experiments/deployment_restore_probe.py
+node experiments/restored_playback_probe.cjs
+```
+
+Python-проба создаёт частный CA и проверяет TLS hostname/chain без отключения TLS,
+проверяет Secure cookie, роли, private/hidden ACL, Range, социальные данные,
+очередь при остановленном worker, согласованность age snapshot и SSH/hash/rename.
+Затем удаляет исходник, получает **единственную оставшуюся** копию по SSH,
+отклоняет повреждённый архив, восстанавливает отдельные БД/media/TLS, проверяет
+сессии/права, хеши MP4/JPEG, аудит и завершение ожидавшего задания. Занятый target
+перезаписывать нельзя. Отчёт `/tmp/stage11-restore.json`.
+
+Браузерная проба читает приватный `/tmp/stage11-dr/native.json` от первой пробы,
+разрешает `video.test` в loopback и доверяет только SPKI конкретного тестового
+сертификата. Проверяет вход, Secure cookie, настоящие декодированные кадры,
+перемотку, private 404 для гостя, адаптивные размеры и отсутствие storage keys
+в журнале. Нужен Chromium с MP4/H.264, например `/usr/bin/chromium`.
+Отчёт `/tmp/stage11-browser.json`, снимок `/tmp/stage11-restored-mobile.png`.
+Никакие тестовые CA/ключи/учётные данные в Git не добавляются.
+
+Проверка Ubuntu выполнялась в свежем `ubuntu:24.04` с установленными скриптом
+APT-зависимостями, локальным fixture Git origin, проброшенным Docker socket и
+флагами `--no-systemd --use-existing-docker`. Пути checkout монтируются в одинаковые
+абсолютные пути на хосте и в контейнере (bind mounts разрешает Docker daemon).
+В этой облачной сети дополнительно нужны её CA и доступный из контейнера proxy;
+TLS verification сохраняется. Это не проверка systemd, установки daemon на VM,
+firewall, публичного DNS/ACME или физически удалённого backup-хоста. Эти проверки
+выполняются отдельно на предоставленной инфраструктуре по docs/deployment.md.
+
+
+### Исправления этапа 11: независимый повтор восстановления
+
+Для повторной проверки без удаления прежнего `stage11-restored` предусмотрен
+фиксированный suffix `-fixes`. Подготовьте отдельный приватный `/tmp/stage11-dr-fixes`
+с такими же **тестовыми** age/SSH ключами и known_hosts. SSH fixture должен быть
+запущен вместе с sshd, порты 8189/8449/8190/8450 свободны:
+
+```bash
+STAGE11_TEST_SUFFIX=-fixes STAGE11_TEST_PROJECT=stage11-source-fixes uv run --locked python experiments/deployment_restore_probe.py
+STAGE11_TEST_SUFFIX=-fixes node experiments/restored_playback_probe.cjs
+```
+
+Проба создаёт полноценные cert/chain/fullchain/private-key symlinks и Certbot
+`renewal/*.conf`. После удаления source и восстановления проверяет перенос путей.
+Для независимой проверки парсера используйте настоящий Certbot с восстановленным
+`--config-dir`: `certbot certificates`; конфигурация не должна ссылаться на source.
+Это не заменяет публичный `renew --dry-run`: частный домен video.test не проходит ACME.
+Отчёты suffix-варианта: `/tmp/stage11-restore-fixes.json`, `/tmp/stage11-browser-fixes.json`.
+
+`tests/test_ops_storage.py` проверяет реальный обмен pipe при больших stdout/stderr,
+ограничение памяти ошибки, завершение дочерних процессов, таймауты, обратное давление
+при импорте и отказ до запуска при достижении резерва. Проверки preflight/изменения
+свободного места, извлечения архива и переноса/истечения сертификатов — в
+`tests/test_operations.py`. Тесты не расходуют весь реальный диск приложения.

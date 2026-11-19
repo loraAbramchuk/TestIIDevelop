@@ -1,0 +1,17 @@
+# Log the original public path, without query or X-Accel storage keys.
+map $request_uri $video_request_path {
+    ~^([^?]*) $1;
+    default "";
+}
+
+log_format video_ops escape=json '{"time":"$time_iso8601","method":"$request_method","uri":"$video_request_path","status":$status,"bytes":$body_bytes_sent,"duration":$request_time}';
+server {
+    listen 80;
+    server_name ${SITE_DOMAIN};
+    server_tokens off;
+    access_log /var/log/nginx/access.log video_ops;
+    error_log /var/log/nginx/error.log crit;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/acme; }
+    location = /_acme_ready { access_log off; return 200; }
+    location / { return 503; }
+}

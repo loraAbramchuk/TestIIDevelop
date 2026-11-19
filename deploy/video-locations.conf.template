@@ -1,0 +1,53 @@
+    server_tokens off;
+    access_log /var/log/nginx/access.log video_ops;
+    client_max_body_size 1m;
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 30s;
+    proxy_send_timeout 30s;
+    proxy_hide_header X-Content-Type-Options;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Strict-Transport-Security "${HSTS_HEADER}" always;
+
+    location ~ "^/api/videos/[0-9a-fA-F-]{36}/content$" {
+        client_max_body_size ${MAX_UPLOAD_BYTES};
+        client_body_timeout ${UPLOAD_IDLE_TIMEOUT_SECONDS}s;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_read_timeout ${UPLOAD_TIMEOUT_SECONDS}s;
+        proxy_send_timeout ${UPLOAD_IDLE_TIMEOUT_SECONDS}s;
+        proxy_pass http://video_api;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://video_api;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Only an ACL-checked X-Accel-Redirect can enter this location.
+    location ~ "^/_protected_media/([0-9a-f]{32})/(playback[.]mp4|thumbnail[.]jpg)$" {
+        internal;
+        alias /data/media/processing/$1/$2;
+        disable_symlinks on;
+        sendfile on;
+        max_ranges 1;
+        etag off;
+        if_modified_since off;
+        open_file_cache off;
+        add_header Cache-Control "private, no-store" always;
+        add_header Vary Cookie always;
+        # Range filtering runs headers again for 416; keep the initial nosniff once.
+        add_header X-Content-Type-Options nosniff;
+        add_header Strict-Transport-Security "${HSTS_HEADER}" always;
+    }
+
+    # No fallback path may serve sources, temporary files or processing locks.
+    location /_protected_media/ {
+        internal;
+        return 404;
+    }
