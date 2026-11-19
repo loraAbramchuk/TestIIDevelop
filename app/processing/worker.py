@@ -15,8 +15,25 @@ from app.uploads.queue import queue_app
 
 
 def build_worker(settings, sessions):
+    from procrastinate import RetryStrategy
+
+    from app.mail.service import MailDeliveryError, deliver
+
     queue = queue_app(settings)
     queue.job_manager = FencedJobManager(queue.connector)
+
+    @queue.task(
+        name="auth.send",
+        queue="auth-mail",
+        retry=RetryStrategy(max_attempts=3, wait=15, retry_exceptions=[MailDeliveryError]),
+    )
+    async def send_mail(token_id):
+        from sqlalchemy.exc import SQLAlchemyError
+
+        try:
+            await asyncio.to_thread(deliver, settings, sessions, token_id)
+        except SQLAlchemyError:
+            raise MailDeliveryError("mail_database_unavailable") from None
 
     @queue.task(
         name="videos.process",
@@ -93,15 +110,30 @@ async def run(settings):
                     shutdown_graceful_timeout=10,
                 )
             )
+            mail_work = asyncio.create_task(
+                queue.run_worker_async(
+                    queues=["auth-mail"],
+                    concurrency=1,
+                    listen_notify=False,
+                    fetch_job_polling_interval=1,
+                    update_heartbeat_interval=settings.processing_heartbeat_seconds,
+                    stalled_worker_timeout=settings.processing_lease_seconds,
+                    shutdown_graceful_timeout=15,
+                )
+            )
             try:
-                done, _ = await asyncio.wait({work, monitor}, return_when=asyncio.FIRST_COMPLETED)
+                done, _ = await asyncio.wait(
+                    {work, mail_work, monitor}, return_when=asyncio.FIRST_COMPLETED
+                )
                 for task in done:
                     task.result()
             finally:
                 monitor.cancel()
                 if not work.done():
                     work.cancel()
-                await asyncio.gather(work, monitor, return_exceptions=True)
+                if not mail_work.done():
+                    mail_work.cancel()
+                await asyncio.gather(work, mail_work, monitor, return_exceptions=True)
     finally:
         # Remove our heartbeat on a normal exit; SIGKILL is detected by TTL.
         try:

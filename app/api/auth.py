@@ -14,6 +14,7 @@ from app.auth_dependencies import (
 )
 from app.auth_protection import check_csrf, rate_limit
 from app.auth_schemas import AuthOutput, CsrfOutput, LoginInput, RegisterInput, UserOutput
+from app.mail import service as mail
 from app.models import AuthRateLimit, AuthSession, User
 from app.security import csrf_token, hash_password, password_hasher, token_hash, verify_password
 
@@ -83,11 +84,15 @@ def get_csrf(request: Request, response: Response, db: Db, session: CurrentSessi
         403: {"description": "Ошибка CSRF"},
         409: {"description": "Email занят"},
         429: {"description": "Лимит запросов"},
+        503: {"description": "Отправка писем не настроена или временно недоступна"},
     },
 )
 def register(
     payload: RegisterInput, request: Request, response: Response, db: Db, session: CurrentSession
 ):
+    settings = request.app.state.settings
+    if settings.auth_require_verified_email:
+        mail.require_mail(settings)
     rate_limit(db, f"register:{peer(request)}", 5, 3600)
     if session.user_id:
         raise HTTPException(409, "Сначала выйдите из текущего аккаунта")
@@ -98,7 +103,10 @@ def register(
             display_name=payload.display_name,
             password_hash=hash_password(payload.password.get_secret_value()),
             role="user",
+            email_verified_at=None,
         )
+        if settings.mail_configured:
+            mail.issue(db, settings, user, "verify_email")
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Не удалось зарегистрироваться с этим email") from None
@@ -120,7 +128,14 @@ def login(
 ):
     rate_limit(db, f"login-ip:{peer(request)}", 30, 900)
     rate_limit(db, f"login-email:{payload.email}", 10, 900)
-    user = db.scalar(select(User).where(User.email == str(payload.email)))
+    # Serialize login with password reset: a concurrent old-password login must not
+    # create a fresh session after reset has invalidated the account's sessions.
+    user = db.scalar(
+        select(User)
+        .where(User.email == str(payload.email))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     verified = verify_password(
         payload.password.get_secret_value(), user.password_hash if user else None
     )

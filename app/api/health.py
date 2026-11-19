@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.models import (
     AuditEvent,
+    AuthMailToken,
     AuthRateLimit,
     AuthSession,
     Channel,
@@ -46,12 +47,14 @@ class Diagnostics(BaseModel):
     status: Literal["ok", "degraded", "unavailable"]
     checks: dict[str, Literal["ok", "error", "low", "not_configured"]]
     video_uploads: Literal["available", "unavailable"]
+    mail_delivery: Literal["configured", "not_configured"] = "not_configured"
 
 
 def check_database(request: Request) -> None:
     with request.app.state.session_factory() as session:
         session.execute(select(User.id).limit(1))
         session.execute(select(AuthSession.token_hash).limit(1))
+        session.execute(select(AuthMailToken.id).limit(1))
         session.execute(select(AuthRateLimit.key).limit(1))
         session.execute(select(Video.id, Video.playback_key, Video.thumbnail_key).limit(1))
         session.execute(select(VideoGrant.user_id).limit(1))
@@ -146,4 +149,5 @@ def diagnostics(request: Request, response: Response) -> Diagnostics:
         status=status,
         checks=checks,
         video_uploads="available" if uploads_available else "unavailable",
+        mail_delivery="configured" if settings.mail_configured else "not_configured",
     )

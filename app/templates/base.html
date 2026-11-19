@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
     <script src="{{ url_for('static', path='/navigation.js') }}" defer></script>
     <script src="{{ url_for('static', path='/auth.js') }}" defer></script>
+    <script src="{{ url_for('static', path='/api.js') }}" defer></script>
+    <script src="{{ url_for('static', path='/auth-mail.js') }}" defer></script>
     {% block scripts %}{% endblock %}
   </head>
   <body>
@@ -69,7 +71,12 @@
       <div class="sidebar-footer"><span class="footer-brand">{{ app_name }}</span><p>Смотрите. Создавайте. Делитесь.</p></div>
     </aside>
     <noscript><nav class="noscript-navigation" aria-label="Разделы"><a href="/">Главная</a><a href="/subscriptions">Подписки</a><a href="/upload">Загрузить</a></nav></noscript>
-    <main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
+    <main id="main-content" tabindex="-1">
+      {% if user and request.app.state.settings.auth_require_verified_email and not user.email_verified %}
+        <section class="panel" aria-label="Подтверждение email"><p>Подтвердите email, чтобы загружать видео и пользоваться действиями аккаунта.</p><button type="button" id="verification-resend">Отправить письмо подтверждения</button><p id="verification-status" role="status"></p><p id="verification-error" class="error" role="alert"></p></section>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
     <div id="session-notice" class="session-notice" hidden>
       <p id="session-status" class="hint" role="status" hidden></p>
       <p id="session-error" role="alert" class="error"></p>

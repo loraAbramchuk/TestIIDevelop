@@ -1,0 +1,9 @@
+{
+  "status": "passed",
+  "checks": [
+    "0011 to 0012 migration preserves password hash, channel and session",
+    "Existing email is not silently confirmed",
+    "Old session can read own state; unverified content mutation denied",
+    "alembic check has no new upgrade operations"
+  ]
+}

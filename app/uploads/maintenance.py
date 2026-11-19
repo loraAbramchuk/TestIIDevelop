@@ -25,10 +25,14 @@ def main():
     try:
         while not stop.is_set():
             try:
+                from app.mail.service import recover_jobs
                 from app.processing.service import ProcessingService
 
                 processing = ProcessingService(settings, service.sessions)
                 recovered = processing.recover()
+                mail_recovered = recover_jobs(settings, service.sessions)
+                if mail_recovered:
+                    logging.warning("Recovered %s interrupted mail jobs", mail_recovered)
                 if recovered:
                     logging.warning("Recovered %s interrupted video jobs", recovered)
                 count = service.sweep()

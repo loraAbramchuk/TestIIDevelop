@@ -23,7 +23,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(100))
     role: Mapped[str] = mapped_column(String(16), server_default=text("'user'"))
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True).evaluates_none(), default=func.now()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
 
 
 class AuthSession(Base):
@@ -48,6 +55,7 @@ class AuthRateLimit(Base):
 from app.audit.models import AuditEvent  # noqa: E402, F401
 from app.channels.models import Channel, Subscription  # noqa: E402, F401
 from app.interactions.models import Comment, Like  # noqa: E402, F401
+from app.mail.models import AuthMailToken  # noqa: E402, F401
 from app.moderation.models import Report  # noqa: E402, F401
 from app.playlists.models import Playlist, PlaylistItem  # noqa: E402, F401
 from app.processing.models import ProcessingRun, ProcessingWorker  # noqa: E402, F401

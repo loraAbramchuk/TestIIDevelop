@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Рассмотрение жалобы — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/api.js') }}" defer></script><script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/moderation.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/moderation.js') }}" defer></script>{% endblock %}
 {% block content %}
 <p><a href="/moderation">К очереди жалоб</a> · <a href="/moderation/audit?video_id={{ report.video_id }}">История действий с видео</a></p>
 <h1>Рассмотрение жалобы</h1><p>Причина: {{ {'spam':'Спам','prohibited':'Запрещённый контент','copyright':'Нарушение прав','other':'Другое'}[report.reason] }}</p><p class="video-description">{{ report.explanation }}</p>
