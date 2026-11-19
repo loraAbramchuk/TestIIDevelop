@@ -3,7 +3,7 @@
 {% block content %}
   <section class="auth-card">
     <h1>{{ 'Создать аккаунт' if register else 'Войти' }}</h1>
-    <form id="auth-form" data-action="{{ 'register' if register else 'login' }}" data-next="{{ next_path }}">
+    <form id="auth-form" method="post" data-action="{{ 'register' if register else 'login' }}" data-next="{{ next_path }}">
       {% if register %}
         <label for="display_name">Имя</label>
         <input id="display_name" name="display_name" autocomplete="nickname" required maxlength="100">
@@ -15,7 +15,9 @@
              minlength="{{ 12 if register else 1 }}" autocomplete="{{ 'new-password' if register else 'current-password' }}"
              {% if register %}aria-describedby="password-hint"{% endif %}>
       {% if register %}<p id="password-hint" class="hint">От 12 до 128 символов.</p>{% endif %}
+      <p id="form-status" class="hint" role="status" hidden></p>
       <p id="form-error" class="error" role="alert"></p>
+      <button id="auth-check" class="secondary" type="button" hidden>Проверить вход</button>
       <button type="submit">{{ 'Зарегистрироваться' if register else 'Войти' }}</button>
     </form>
     <p>{% if register %}Уже есть аккаунт? <a href="/login?next={{ next_path|urlencode }}">Войти</a>

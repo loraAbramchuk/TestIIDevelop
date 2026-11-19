@@ -18,10 +18,10 @@
         <p><button id="playlist-delete" class="danger" type="button">Удалить плейлист</button></p>
       </div>
     {% endif %}
-    <div id="playlist-videos">{% set playlist_manage = playlist.can_manage %}{% include "video_grid.html" %}</div>
+    <section id="playlist-videos" class="video-grid" aria-label="Видео плейлиста">{% set playlist_manage = playlist.can_manage %}{% set playlist_grid_contents = true %}{% include "video_grid.html" %}</section>
     <p id="playlist-empty" {% if page['items'] %}hidden{% endif %}>В плейлисте пока нет доступных видео.</p>
     <button id="playlist-more" type="button" {% if not page.next_cursor %}hidden{% endif %}>Ещё видео</button>
     <noscript>{% if page.next_cursor %}<a href="/playlists/{{ playlist.id }}?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a>{% endif %} Для управления плейлистом включите JavaScript.</noscript>
   </section>
-  <template id="playlist-card-template"><article class="video-card"><a class="card-preview"><img loading="lazy"></a><div class="card-body"><h2><a class="card-title"></a></h2><a class="card-author"></a><p class="hint"></p><div class="playlist-actions"><button type="button" data-move-up>Выше</button><button type="button" data-move-down>Ниже</button><button type="button" class="secondary" data-remove-video>Убрать из плейлиста</button></div></div></article></template>
+  <template id="playlist-card-template"><article class="video-card"><a class="card-preview"><img loading="lazy"><span class="card-duration"></span></a><div class="card-body"><span class="avatar card-avatar" aria-hidden="true"></span><div class="card-copy"><h2><a class="card-title"></a></h2><a class="card-author"></a><p class="hint"></p><div class="playlist-actions"><button type="button" data-move-up>Выше</button><button type="button" data-move-down>Ниже</button><button type="button" class="secondary" data-remove-video>Убрать из плейлиста</button></div></div></div></article></template>
 {% endblock %}
