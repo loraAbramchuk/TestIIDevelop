@@ -10,6 +10,7 @@ from sqlalchemy import case
 from sqlalchemy.dialects.postgresql import insert
 
 from app.auth_dependencies import CurrentSession, session_token
+from app.errors import DomainError
 from app.models import AuthRateLimit
 from app.security import csrf_token, token_hash
 
@@ -53,4 +54,6 @@ def check_csrf(
         or not header
         or not hmac.compare_digest(csrf_token(token).encode(), header.encode())
     ):
-        raise HTTPException(403, "Недействительный CSRF-токен. Обновите страницу")
+        raise DomainError(
+            403, "csrf_invalid", "Недействительный CSRF-токен. Обновите токен и повторите действие"
+        )

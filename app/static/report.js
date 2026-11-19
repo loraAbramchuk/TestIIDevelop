@@ -12,7 +12,7 @@
       await apiRequest(`/api/videos/${form.dataset.videoId}/reports`, 'POST', payload, data => ModerationData.receipt(data, form.dataset.videoId) && data.status === 'open');
       sent = true; success.textContent = 'Жалоба отправлена на рассмотрение.';
     } catch (failure) {
-      error.textContent = failure instanceof TypeError || failure.code === 'invalid_response' ? 'Не удалось подтвердить отправку. Можно повторить: открытая жалоба не дублируется.' : failure.message;
+      error.textContent = failure instanceof TypeError || ['invalid_response', 'request_timeout'].includes(failure.code) ? 'Не удалось подтвердить отправку. Можно повторить: открытая жалоба не дублируется.' : failure.message;
     } finally {
       busy = false;
       for (const control of form.elements) control.disabled = sent;

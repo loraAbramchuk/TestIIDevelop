@@ -1,7 +1,7 @@
 // Starts with CLI bootstrap; use only the isolated stage10_browser app on port 8097.
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),crypto=require('node:crypto'),fs=require('node:fs'),{execFileSync}=require('node:child_process');
 (async()=>{
- const base=process.env.ADMIN_TEST_BASE_URL||'http://127.0.0.1:8097';assert.equal(base,'http://127.0.0.1:8097');assert.equal(process.env.POSTGRES_DB,'stage10_browser');
+ const base=process.env.ADMIN_TEST_BASE_URL||'http://127.0.0.1:8097';assert.equal(base,'http://127.0.0.1:8097');assert.ok(['stage10_browser','stage10_fixes_browser'].includes(process.env.POSTGRES_DB));
  const rootEmail=`root-${crypto.randomUUID()}@example.com`,password=crypto.randomBytes(24).toString('hex');
  execFileSync('.venv/bin/python',['-c',`import json,sys,getpass
 from app import cli
@@ -27,7 +27,7 @@ from app.config import Settings
 from app.db import make_engine,make_session_factory
 from app.models import User,Video
 from sqlalchemy import select
-s=Settings();assert s.postgres_db=='stage10_browser';e=make_engine(s)
+s=Settings();assert s.postgres_db in ('stage10_browser','stage10_fixes_browser');e=make_engine(s)
 with make_session_factory(e)() as db:
  u=db.scalar(select(User).where(User.email==sys.stdin.read()))
  a=Video(owner_id=u.id,title='Private marker',visibility='private',processing_status='ready',duration_seconds=2,width=320,height=180)
@@ -44,6 +44,7 @@ e.dispose()`],{input:rootEmail,encoding:'utf8'}));
   await page.goto(base+'/admin/users?q='+encodeURIComponent('%_'));assert.equal(await page.locator('.admin-user').count(),1);
   const first=await get(root,'/api/admin/users?limit=1');assert.ok(first.next_cursor);const second=await get(root,'/api/admin/users?limit=1&cursor='+encodeURIComponent(first.next_cursor));assert.notEqual(first.items[0].id,second.items[0].id);
   checks.push('literal search, bounded pagination, idempotent assignment preserves draft without extra audit');
+  await require('./administration_recovery_browser_probe.cjs')({base,root,page,targetId:otherId,checks});
   card=await search(email);assert.equal((await write(root,memberId,'moderator')).status(),200);await assign(card,'user','Конфликтующий черновик');await card.locator('[data-user-error]').filter({hasText:'Роль уже изменена'}).waitFor();await card.getByText('Сведения обновлены. Несохранённый текст сохранён.',{exact:true}).waitFor();assert.equal(await card.getAttribute('data-role'),'moderator');assert.equal(await card.getByLabel('Причина изменения',{exact:true}).inputValue(),'Конфликтующий черновик');
   checks.push('stale expected_role returns conflict and refreshes role without losing desired role/reason');
   card=await search(rootEmail);assert.ok(await card.locator('option[value=user]').isDisabled());assert.ok(await card.locator('option[value=moderator]').isDisabled());assert.equal((await write(root,rootId,'moderator')).status(),409);

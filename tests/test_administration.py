@@ -444,3 +444,26 @@ def test_role_audit_pagination_and_cursor_context(administration):
         )
         == 5
     )
+
+
+@pytest.mark.parametrize("token", [None, "stale-token"])
+def test_csrf_failure_is_distinct_from_loss_of_admin_access(administration, token):
+    c = administration
+    headers = {"Cookie": c.actors["admin"].headers["Cookie"]}
+    if token is not None:
+        headers["X-CSRF-Token"] = token
+    response = c.client.patch(
+        f"/api/admin/users/{c.actors['member'].id}/role",
+        json={"role": "moderator", "reason": "Причина сохраняется"},
+        headers=headers,
+    )
+    assert response.status_code == 403 and response.json()["code"] == "csrf_invalid"
+    assert c.client.get("/api/auth/me", headers=headers).json()["role"] == "admin"
+    assert c.client.get("/api/admin/users", headers=headers).status_code == 200
+    with c.factory() as db:
+        assert db.get(User, c.actors["member"].id).role == "user"
+        assert (
+            list(db.scalars(select(AuditEvent).where(AuditEvent.actor_id == c.actors["admin"].id)))
+            == []
+        )
+    assert change(c).json()["changed"] is True

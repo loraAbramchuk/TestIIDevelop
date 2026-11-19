@@ -96,7 +96,7 @@
         document.getElementById('report-state').textContent = 'Жалоба уже рассмотрена';
       }
       if (videoForm && failure.code === 'video_deleted') form.dataset.deleted = 'true';
-      if (failure instanceof TypeError || failure.code === 'invalid_response' || failure.status === 404 || failure.status === 409 || failure.status >= 500) {
+      if (failure instanceof TypeError || ['invalid_response', 'request_timeout'].includes(failure.code) || failure.status === 404 || failure.status === 409 || failure.status >= 500) {
         needsRefresh = true; concealVideo(); await refreshState(true);
       }
     } finally { busy = false; controls(); }
