@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Мои видео — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/videos.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/videos.js') }}" defer></script>{% endblock %}
 {% block content %}
   <h1>Мои видео</h1>
   <p class="account-id">ID вашего аккаунта: <code>{{ user.id }}</code>.<br>Передайте его автору, чтобы он разрешил вам просмотр приватного видео.</p>

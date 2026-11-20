@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Загрузка видео — {{ app_name }}{% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', path='/videos.js') }}" defer></script>
-<script src="{{ url_for('static', path='/processing.js') }}" defer></script>
-<script src="{{ url_for('static', path='/upload.js') }}" defer></script>
+<script src="{{ static_url(request, '/videos.js') }}" defer></script>
+<script src="{{ static_url(request, '/processing.js') }}" defer></script>
+<script src="{{ static_url(request, '/upload.js') }}" defer></script>
 {% endblock %}
 {% block content %}
   <h1>Загрузить видео</h1>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/videos.js') }}" defer></script><script src="{{ url_for('static', path='/processing.js') }}" defer></script><script src="{{ url_for('static', path='/upload.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/videos.js') }}" defer></script><script src="{{ static_url(request, '/processing.js') }}" defer></script><script src="{{ static_url(request, '/upload.js') }}" defer></script>{% endblock %}
 {% block content %}
   <p><a href="/studio">← Мои видео</a></p>
   <h1>Управление видео</h1>

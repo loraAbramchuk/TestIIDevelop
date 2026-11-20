@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Пользователи — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/administration.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script><script src="{{ static_url(request, '/administration.js') }}" defer></script>{% endblock %}
 {% block content %}
 <h1>Пользователи</h1><p id="admin-access-message" role="status"></p><p id="admin-session-error" class="error" role="alert"></p>
 <section id="admin-users" data-viewer-id="{{ user.id }}" data-admin-count="{{ page.admin_count }}">

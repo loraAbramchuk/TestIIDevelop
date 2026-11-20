@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Модерация — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script>{% endblock %}
 {% block content %}
 <h1>Жалобы</h1><p><a href="/moderation/audit">Журнал действий</a></p>
 <form class="panel" action="/moderation" method="get"><label for="report-filter">Статус жалоб</label><select id="report-filter" name="status">{% for value, label in [('open','Открытые'),('resolved','Решённые'),('dismissed','Отклонённые'),('all','Все')] %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit">Показать</button></form>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}История назначения ролей — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script>{% endblock %}
 {% block content %}
 <h1>История назначения ролей</h1><p><a href="/admin/users">Пользователи</a>{% if target_user_id %} · <a href="/admin/audit">Все изменения ролей</a>{% endif %}</p>
 {% for event in page['items'] %}<article class="video-row"><h2>Роль пользователя изменена</h2><p class="account-id">Пользователь: {{ event.object_id }}</p><p class="account-id">Исполнитель: {{ event.actor_id }}</p><p>Прежняя роль: {{ event.details.previous_role }} → {{ event.details.role }}</p><p><time datetime="{{ event.created_at.isoformat() }}">{{ event.created_at.isoformat() }}</time></p><p class="video-description">{{ event.reason }}</p></article>{% else %}<p>Изменений ролей пока нет.</p>{% endfor %}

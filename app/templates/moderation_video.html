@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Модерация видео — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/moderation.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/moderation-data.js') }}" defer></script><script src="{{ static_url(request, '/catalog.js') }}" defer></script><script src="{{ static_url(request, '/moderation.js') }}" defer></script>{% endblock %}
 {% block content %}
 <p><a href="/moderation">К очереди жалоб</a> · <a href="/moderation/audit?video_id={{ video.id }}">История действий с видео</a></p>
 <h1>Модерация видео</h1>{% include "moderation_video_summary.html" %}

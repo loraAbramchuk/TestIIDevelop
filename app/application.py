@@ -30,7 +30,7 @@ from app.navigation import local_return_path
 from app.playlists.pages import router as playlist_pages
 from app.playlists.router import router as playlist_router
 from app.storage_health import initialize_storage
-from app.templating import PACKAGE_ROOT, templates
+from app.templating import PACKAGE_ROOT, static_url, templates
 from app.uploads.router import router as upload_router
 from app.videos.pages import router as video_pages
 from app.videos.router import router as video_router
@@ -90,9 +90,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return get_swagger_ui_html(
             openapi_url=request.url_for("openapi").path,
             title=f"{settings.app_name} — Swagger UI",
-            swagger_js_url=request.url_for("static", path=assets + "swagger-ui-bundle.js").path,
-            swagger_css_url=request.url_for("static", path=assets + "swagger-ui.css").path,
-            swagger_favicon_url=request.url_for("static", path=assets + "favicon-32x32.png").path,
+            swagger_js_url=static_url(request, assets + "swagger-ui-bundle.js"),
+            swagger_css_url=static_url(request, assets + "swagger-ui.css"),
+            swagger_favicon_url=static_url(request, assets + "favicon-32x32.png"),
             swagger_ui_parameters={"validatorUrl": None},
         )
 
@@ -156,8 +156,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def response_headers(request: Request, call_next):
+        route_path = request.url.path.removeprefix(request.scope.get("root_path", ""))
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
+        if route_path.startswith("/static/"):
+            # URLs change with content; revalidate reused URLs instead of relying
+            # on a heuristic freshness lifetime inherited from Last-Modified.
+            response.headers["Cache-Control"] = "no-cache"
         if request.url.path in ("/verify-email", "/forgot-password", "/reset-password"):
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["X-Robots-Tag"] = "noindex, nofollow"
