@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script>{% endblock %}
 {% block content %}
   <div class="feed-toolbar">
     <nav class="feed-tabs" aria-label="Разделы ленты"><a class="active" href="/" aria-current="page">Все видео</a><a href="/subscriptions">Из подписок</a><a href="/my-playlists">Ваши плейлисты</a></nav>

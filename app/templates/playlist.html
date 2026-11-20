@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ playlist.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/catalog.js') }}" defer></script><script src="{{ url_for('static', path='/playlists.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script><script src="{{ static_url(request, '/playlists.js') }}" defer></script>{% endblock %}
 {% block content %}
   <section id="playlist" data-playlist-id="{{ playlist.id }}" data-next-cursor="{{ page.next_cursor or '' }}" data-limit="{{ limit }}" data-can-manage="{{ 'true' if playlist.can_manage else 'false' }}" data-app-name="{{ app_name }}">
     <h1 id="playlist-heading">{{ playlist.title }}</h1>

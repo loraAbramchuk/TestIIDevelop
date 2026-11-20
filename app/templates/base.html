@@ -7,12 +7,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#ffffff">
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
-    <link rel="icon" href="{{ url_for('static', path='/favicon.svg') }}" type="image/svg+xml">
-    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
-    <script src="{{ url_for('static', path='/navigation.js') }}" defer></script>
-    <script src="{{ url_for('static', path='/auth.js') }}" defer></script>
-    <script src="{{ url_for('static', path='/api.js') }}" defer></script>
-    <script src="{{ url_for('static', path='/auth-mail.js') }}" defer></script>
+    <link rel="icon" href="{{ static_url(request, '/favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ static_url(request, '/styles.css') }}">
+    <script src="{{ static_url(request, '/navigation.js') }}" defer></script>
+    <script src="{{ static_url(request, '/auth.js') }}" defer></script>
+    <script src="{{ static_url(request, '/api.js') }}" defer></script>
+    <script src="{{ static_url(request, '/auth-mail.js') }}" defer></script>
     {% block scripts %}{% endblock %}
   </head>
   <body>

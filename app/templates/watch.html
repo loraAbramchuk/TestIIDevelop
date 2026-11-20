@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }} — {{ app_name }}{% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='/watch.js') }}" defer></script><script src="{{ url_for('static', path='/related-videos.js') }}" defer></script><script src="{{ url_for('static', path='/moderation-data.js') }}" defer></script><script src="{{ url_for('static', path='/interactions.js') }}" defer></script><script src="{{ url_for('static', path='/report.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/watch.js') }}" defer></script><script src="{{ static_url(request, '/related-videos.js') }}" defer></script><script src="{{ static_url(request, '/moderation-data.js') }}" defer></script><script src="{{ static_url(request, '/interactions.js') }}" defer></script><script src="{{ static_url(request, '/report.js') }}" defer></script>{% endblock %}
 {% block content %}
 <div class="watch-layout">
 <div class="watch-primary">
