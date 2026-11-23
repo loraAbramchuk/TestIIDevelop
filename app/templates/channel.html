@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ channel.name }} — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script><script src="{{ static_url(request, '/channels.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <section id="channel-profile" data-channel-id="{{ channel.id }}" data-app-name="{{ app_name }}">
+    <div class="channel-banner" aria-hidden="true"></div>
+    <div class="channel-heading"><span class="avatar channel-avatar" data-channel-avatar data-channel-id="{{ channel.id }}" aria-hidden="true">{{ channel.name[:1]|upper }}</span><div>
+      <h1 data-channel-label data-channel-id="{{ channel.id }}">{{ channel.name }}</h1>
+      <p>Подписчиков: <span id="subscriber-count">{{ channel.subscriber_count }}</span></p>
+    </div></div>
+    <p id="channel-description" class="video-description">{{ channel.description }}</p>
+    {% if user and user.id == channel.owner_id %}
+      <p>Ваш канал · <a href="/studio">Управление видео</a></p>
+      <section class="panel">
+        <h2>Настройки канала</h2>
+        <form id="channel-edit">
+          <label for="channel-name">Название канала</label><input id="channel-name" name="name" value="{{ channel.name }}" required maxlength="100">
+          <label for="channel-about">Описание канала</label><textarea id="channel-about" name="description" rows="4" maxlength="2000">{{ channel.description }}</textarea>
+          <p class="error" role="alert" data-error></p><p class="success" role="status" data-success></p>
+          <button type="submit">Сохранить канал</button>
+        </form>
+      </section>
+    {% elif user %}
+      <button id="subscribe" type="button" data-subscribed="{{ 'true' if channel.is_subscribed else 'false' }}" aria-pressed="{{ 'true' if channel.is_subscribed else 'false' }}">{{ 'Отписаться' if channel.is_subscribed else 'Подписаться' }}</button>
+      <p class="error" id="subscription-error" role="alert"></p>
+    {% else %}<p><a href="/login?next={{ ('/channels/' ~ channel.id)|urlencode }}">Войдите, чтобы подписаться</a></p>{% endif %}
+  </section>
+  <h2>Видео канала</h2>
+  {% if page['items'] %}{% include "video_grid.html" %}{% else %}<p>Здесь пока нет доступных видео.</p>{% endif %}
+  {% if page.next_cursor %}<p><a class="next-page" href="/channels/{{ channel.id }}?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}{% if playlist_cursor %}&amp;playlist_cursor={{ playlist_cursor|urlencode }}{% endif %}&amp;playlist_limit={{ playlist_limit }}">Следующая страница</a></p>{% endif %}
+  <section aria-label="Плейлисты канала"><h2>Плейлисты</h2>
+    {% if user and user.id == channel.owner_id %}<p><a href="/my-playlists">Управление плейлистами</a></p>{% endif %}
+    {% include "playlist_list.html" %}
+    {% if playlist_page.next_cursor %}<p><a href="/channels/{{ channel.id }}?playlist_limit={{ playlist_limit }}&amp;playlist_cursor={{ playlist_page.next_cursor|urlencode }}&amp;limit={{ limit }}{% if video_cursor %}&amp;cursor={{ video_cursor|urlencode }}{% endif %}">Ещё плейлисты</a></p>{% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,153 @@
+import logging
+from shutil import disk_usage
+from typing import Literal
+
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.models import (
+    AuditEvent,
+    AuthMailToken,
+    AuthRateLimit,
+    AuthSession,
+    Channel,
+    Comment,
+    Like,
+    Playlist,
+    PlaylistItem,
+    ProcessingRun,
+    ProcessingWorker,
+    Report,
+    Subscription,
+    UploadAdmission,
+    UploadAttempt,
+    User,
+    Video,
+    VideoGrant,
+)
+from app.processing.health import live_workers
+from app.storage_health import check_storage_read, check_storage_write
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/health", tags=["health"])
+
+
+class LiveStatus(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
+class ReadyStatus(BaseModel):
+    status: Literal["ok", "unavailable"]
+    checks: dict[str, Literal["ok", "error"]]
+
+
+class Diagnostics(BaseModel):
+    status: Literal["ok", "degraded", "unavailable"]
+    checks: dict[str, Literal["ok", "error", "low", "not_configured"]]
+    video_uploads: Literal["available", "unavailable"]
+    mail_delivery: Literal["configured", "not_configured"] = "not_configured"
+
+
+def check_database(request: Request) -> None:
+    with request.app.state.session_factory() as session:
+        session.execute(select(User.id).limit(1))
+        session.execute(select(AuthSession.token_hash).limit(1))
+        session.execute(select(AuthMailToken.id).limit(1))
+        session.execute(select(AuthRateLimit.key).limit(1))
+        session.execute(select(Video.id, Video.playback_key, Video.thumbnail_key).limit(1))
+        session.execute(select(VideoGrant.user_id).limit(1))
+        session.execute(select(UploadAttempt.id, UploadAttempt.current_run_id).limit(1))
+        session.execute(select(ProcessingRun.id).limit(1))
+        session.execute(select(ProcessingWorker.id).limit(1))
+        session.execute(select(Channel.id, Channel.owner_id).limit(1))
+        session.execute(select(Subscription.channel_id).limit(1))
+        session.execute(select(Like.video_id).limit(1))
+        session.execute(select(Comment.id, Comment.text).limit(1))
+        session.execute(select(Playlist.id, Playlist.revision).limit(1))
+        session.execute(select(PlaylistItem.playlist_id, PlaylistItem.position).limit(1))
+        session.execute(select(Report.id, Report.status).limit(1))
+        session.execute(select(AuditEvent.id).limit(1))
+
+
+def readiness_checks(request: Request) -> dict:
+    checks = {}
+    try:
+        check_database(request)
+        checks["database"] = "ok"
+    except SQLAlchemyError:
+        logger.warning("Database readiness check failed")
+        checks["database"] = "error"
+    try:
+        check_storage_read(request.app.state.settings.media_root)
+        checks["storage"] = "ok"
+    except OSError:
+        logger.warning("Storage read readiness check failed")
+        checks["storage"] = "error"
+    return checks
+
+
+@router.get("/live", response_model=LiveStatus)
+def live() -> LiveStatus:
+    return LiveStatus()
+
+
+@router.get("/ready", response_model=ReadyStatus, responses={503: {"model": ReadyStatus}})
+def ready(request: Request, response: Response) -> ReadyStatus:
+    checks = readiness_checks(request)
+    healthy = all(value == "ok" for value in checks.values())
+    response.status_code = 200 if healthy else 503
+    response.headers["Cache-Control"] = "no-store"
+    return ReadyStatus(status="ok" if healthy else "unavailable", checks=checks)
+
+
+@router.get("/diagnostics", response_model=Diagnostics)
+def diagnostics(request: Request, response: Response) -> Diagnostics:
+    checks = readiness_checks(request)
+    settings = request.app.state.settings
+    try:
+        check_storage_write(settings.media_root)
+        checks["storage_write"] = "ok"
+    except OSError:
+        checks["storage_write"] = "error"
+    try:
+        checks["disk_reserve"] = (
+            "ok" if disk_usage(settings.media_root).free >= settings.media_min_free_bytes else "low"
+        )
+    except OSError:
+        checks["disk_reserve"] = "error"
+    try:
+        with request.app.state.session_factory() as session:
+            admission = session.get(UploadAdmission, 1)
+            session.execute(text("SELECT id FROM video_queue.procrastinate_jobs LIMIT 1"))
+            pending = session.scalar(
+                select(func.count())
+                .select_from(UploadAttempt)
+                .where(UploadAttempt.state.in_(("receiving", "processing")))
+            )
+            checks["upload_queue"] = (
+                "ok" if admission and pending < settings.max_pending_video_jobs else "low"
+            )
+    except SQLAlchemyError:
+        checks["upload_queue"] = "error"
+    try:
+        with request.app.state.session_factory() as session:
+            checks["processing"] = "ok" if live_workers(session, settings) else "error"
+    except SQLAlchemyError:
+        checks["processing"] = "error"
+    status = "ok"
+    if checks["database"] == "error" or checks["storage"] == "error":
+        status = "unavailable"
+    elif any(checks[key] != "ok" for key in ("storage_write", "disk_reserve", "upload_queue")):
+        status = "degraded"
+    uploads_available = status == "ok"
+    if status == "ok" and checks["processing"] != "ok":
+        status = "degraded"
+    response.headers["Cache-Control"] = "no-store"
+    return Diagnostics(
+        status=status,
+        checks=checks,
+        video_uploads="available" if uploads_available else "unavailable",
+        mail_delivery="configured" if settings.mail_configured else "not_configured",
+    )

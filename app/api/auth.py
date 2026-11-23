@@ -1,0 +1,164 @@
+import secrets
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
+
+from app.accounts import add_user_with_channel
+from app.auth_dependencies import (
+    CurrentSession,
+    CurrentUser,
+    Db,
+    session_token,
+)
+from app.auth_protection import check_csrf, rate_limit
+from app.auth_schemas import AuthOutput, CsrfOutput, LoginInput, RegisterInput, UserOutput
+from app.mail import service as mail
+from app.models import AuthRateLimit, AuthSession, User
+from app.security import csrf_token, hash_password, password_hasher, token_hash, verify_password
+
+router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def peer(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def set_session_cookie(request: Request, response: Response, token: str, seconds: int) -> None:
+    settings = request.app.state.settings
+    response.set_cookie(
+        settings.session_cookie_name,
+        token,
+        max_age=seconds,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+def new_session(db, user_id, seconds: int) -> str:
+    token = secrets.token_urlsafe(32)
+    db.add(
+        AuthSession(
+            token_hash=token_hash(token),
+            user_id=user_id,
+            expires_at=datetime.now(UTC) + timedelta(seconds=seconds),
+        )
+    )
+    return token
+
+
+def authenticated_response(request, response, db, previous, user) -> AuthOutput:
+    if previous:
+        db.delete(previous)
+    seconds = request.app.state.settings.session_lifetime_hours * 3600
+    token = new_session(db, user.id, seconds)
+    db.commit()
+    set_session_cookie(request, response, token, seconds)
+    return AuthOutput(user=UserOutput.model_validate(user), csrf_token=csrf_token(token))
+
+
+@router.get("/csrf", response_model=CsrfOutput, responses={429: {"description": "Лимит запросов"}})
+def get_csrf(request: Request, response: Response, db: Db, session: CurrentSession) -> CsrfOutput:
+    if session:
+        return CsrfOutput(csrf_token=csrf_token(session_token(request)))
+    rate_limit(db, f"csrf:{peer(request)}", 60, 60)
+    # Bound persistent state from expired anonymous/authenticated sessions and old counters.
+    now = datetime.now(UTC)
+    db.execute(delete(AuthSession).where(AuthSession.expires_at <= now))
+    db.execute(delete(AuthRateLimit).where(AuthRateLimit.resets_at < now))
+    token = new_session(db, None, 1800)
+    db.commit()
+    set_session_cookie(request, response, token, 1800)
+    return CsrfOutput(csrf_token=csrf_token(token))
+
+
+@router.post(
+    "/register",
+    response_model=AuthOutput,
+    status_code=201,
+    dependencies=[Depends(check_csrf)],
+    responses={
+        403: {"description": "Ошибка CSRF"},
+        409: {"description": "Email занят"},
+        429: {"description": "Лимит запросов"},
+        503: {"description": "Отправка писем не настроена или временно недоступна"},
+    },
+)
+def register(
+    payload: RegisterInput, request: Request, response: Response, db: Db, session: CurrentSession
+):
+    settings = request.app.state.settings
+    if settings.auth_require_verified_email:
+        mail.require_mail(settings)
+    rate_limit(db, f"register:{peer(request)}", 5, 3600)
+    if session.user_id:
+        raise HTTPException(409, "Сначала выйдите из текущего аккаунта")
+    try:
+        user = add_user_with_channel(
+            db,
+            email=str(payload.email),
+            display_name=payload.display_name,
+            password_hash=hash_password(payload.password.get_secret_value()),
+            role="user",
+            email_verified_at=None,
+        )
+        if settings.mail_configured:
+            mail.issue(db, settings, user, "verify_email")
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Не удалось зарегистрироваться с этим email") from None
+    return authenticated_response(request, response, db, session, user)
+
+
+@router.post(
+    "/login",
+    response_model=AuthOutput,
+    dependencies=[Depends(check_csrf)],
+    responses={
+        401: {"description": "Неверные данные"},
+        403: {"description": "Ошибка CSRF"},
+        429: {"description": "Лимит запросов"},
+    },
+)
+def login(
+    payload: LoginInput, request: Request, response: Response, db: Db, session: CurrentSession
+):
+    rate_limit(db, f"login-ip:{peer(request)}", 30, 900)
+    rate_limit(db, f"login-email:{payload.email}", 10, 900)
+    # Serialize login with password reset: a concurrent old-password login must not
+    # create a fresh session after reset has invalidated the account's sessions.
+    user = db.scalar(
+        select(User)
+        .where(User.email == str(payload.email))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    verified = verify_password(
+        payload.password.get_secret_value(), user.password_hash if user else None
+    )
+    if not verified or user is None:
+        raise HTTPException(401, "Неверный email или пароль")
+    if password_hasher.check_needs_rehash(user.password_hash):
+        user.password_hash = hash_password(payload.password.get_secret_value())
+    return authenticated_response(request, response, db, session, user)
+
+
+@router.get("/me", response_model=UserOutput, responses={401: {"description": "Требуется вход"}})
+def me(user: CurrentUser) -> User:
+    return user
+
+
+@router.post("/logout", status_code=204, dependencies=[Depends(check_csrf)])
+def logout(request: Request, response: Response, db: Db, session: CurrentSession):
+    db.delete(session)
+    db.commit()
+    response.delete_cookie(
+        request.app.state.settings.session_cookie_name,
+        path="/",
+        secure=request.app.state.settings.auth_cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )

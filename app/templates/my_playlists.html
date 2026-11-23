@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Мои плейлисты — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script><script src="{{ static_url(request, '/playlists.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <h1>Мои плейлисты</h1>
+  <section class="panel"><h2>Создать плейлист</h2>
+    <form id="playlist-create"><label for="playlist-title">Название плейлиста</label><input id="playlist-title" name="title" required maxlength="200"><p class="error" data-error role="alert"></p><button type="submit">Создать плейлист</button></form>
+    <p class="hint">Плейлисты публичные. Доступ к приватным видео выдаётся отдельно.</p>
+  </section>
+  {% set playlist_page = page %}{% include "playlist_list.html" %}
+  {% if page.next_cursor %}<p><a class="next-page" href="/my-playlists?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Ещё плейлисты</a></p>{% endif %}
+{% endblock %}

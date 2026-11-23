@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Журнал модерации — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script>{% endblock %}
+{% block content %}
+<h1>Журнал модерации</h1><p><a href="/moderation">К очереди жалоб</a>{% if video_id %} · <a href="/moderation/videos/{{ video_id }}">К видео</a> · <a href="/moderation/audit">Все действия</a>{% endif %}</p>
+{% for event in page['items'] %}<article class="video-row audit-row"><h2>{{ {'video.hidden':'Видео скрыто','video.restored':'Видео восстановлено','report.resolved':'Жалоба решена','report.dismissed':'Жалоба отклонена'}.get(event.action,event.action) }}</h2><p class="account-id">Исполнитель: {{ event.actor_id }}</p><p class="account-id">Объект: {{ event.object_type }} {{ event.object_id }}</p><p><time datetime="{{ event.created_at.isoformat() }}">{{ event.created_at.isoformat() }}</time></p><p class="video-description">{{ event.reason }}</p></article>{% else %}<p>Действий пока нет.</p>{% endfor %}
+{% if page.next_cursor %}<p><a class="next-page" href="/moderation/audit?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}{% if video_id %}&amp;video_id={{ video_id }}{% endif %}">Ещё действия</a></p>{% endif %}
+{% endblock %}

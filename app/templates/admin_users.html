@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Пользователи — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script><script src="{{ static_url(request, '/administration.js') }}" defer></script>{% endblock %}
+{% block content %}
+<h1>Пользователи</h1><p id="admin-access-message" role="status"></p><p id="admin-session-error" class="error" role="alert"></p>
+<section id="admin-users" data-viewer-id="{{ user.id }}" data-admin-count="{{ page.admin_count }}">
+<p data-admin-panel><a href="/admin/audit">История назначения ролей</a></p>
+<p>Администраторов на момент запроса: <span id="admin-count">{{ page.admin_count }}</span>. Последнего администратора нельзя понизить. Роли не предоставляют доступ к приватным видео.</p>
+<form action="/admin/users" method="get" class="panel" data-admin-panel><label for="user-query">Имя или email</label><input id="user-query" name="q" maxlength="200" value="{{ user_query }}"><label for="user-role-filter">Роль</label><select id="user-role-filter" name="role">{% for value,label in [('all','Все'),('user','Пользователь'),('moderator','Модератор'),('admin','Администратор')] %}<option value="{{ value }}" {% if role_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button type="submit">Найти пользователя</button></form>
+<p>После изменения роли поиск и следующая страница заново проверяют текущие данные. Несохранённые причины остаются в открытых карточках.</p>
+<div data-admin-panel>
+{% for account in page['items'] %}<article class="video-row admin-user" data-user-id="{{ account.id }}" data-role="{{ account.role }}">
+<h2 data-user-name>{{ account.display_name }}</h2><p data-user-email>{{ account.email }}</p><p class="account-id">ID: {{ account.id }}{% if account.id == user.id %} · Ваш аккаунт{% endif %}</p><p>Текущая роль: <span data-user-role>{{ {'user':'Пользователь','moderator':'Модератор','admin':'Администратор'}[account.role] }}</span></p>
+<p><a href="/admin/audit?user_id={{ account.id }}">История роли пользователя</a></p>
+<form class="admin-role-form"><label for="role-{{ account.id }}">Новая роль</label><select id="role-{{ account.id }}" name="role">{% for value,label in [('user','Пользователь'),('moderator','Модератор'),('admin','Администратор')] %}<option value="{{ value }}" {% if account.role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><label for="reason-{{ account.id }}">Причина изменения</label><textarea id="reason-{{ account.id }}" name="reason" required maxlength="2000" rows="3"></textarea><button type="submit">Назначить роль</button></form>
+<p data-last-admin class="hint" {% if account.role != 'admin' or page.admin_count != 1 %}hidden{% endif %}>Сначала назначьте другого администратора, чтобы понизить эту роль.</p>
+<button type="button" class="secondary" data-user-refresh>Обновить пользователя</button><p data-user-error class="error" role="alert"></p><p data-user-success class="success" role="status"></p><p data-user-read role="status"></p>
+</article>{% else %}<p>Пользователи не найдены.</p>{% endfor %}
+</div>
+{% if page.next_cursor %}<p data-admin-panel><a class="next-page" href="/admin/users?q={{ user_query|urlencode }}&amp;role={{ role_filter }}&amp;limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Ещё пользователи</a></p>{% endif %}
+</section><p><a href="/">На главную</a></p>
+{% endblock %}

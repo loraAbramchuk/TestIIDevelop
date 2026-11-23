@@ -1,0 +1,189 @@
+name: video-platform
+
+x-app: &app
+  image: ${APP_IMAGE:-video-platform-app:local}
+  build: .
+  logging: &bounded-logs
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  environment:
+    DB_HOST: db
+    POSTGRES_DB: ${POSTGRES_DB:-video}
+    POSTGRES_USER: ${POSTGRES_USER:-video}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/start.sh to create .env}
+    MEDIA_ROOT: /data/media
+    AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+    SESSION_LIFETIME_HOURS: ${SESSION_LIFETIME_HOURS:-336}
+    AUTH_REQUIRE_VERIFIED_EMAIL: ${AUTH_REQUIRE_VERIFIED_EMAIL:-true}
+    AUTH_MAIL_SECRET: ${AUTH_MAIL_SECRET:-}
+    MAIL_BACKEND: ${MAIL_BACKEND:-auto}
+    MAILPIT_HOST: mailpit
+    MAILPIT_PORT: "1025"
+    MAILPIT_UI_URL: http://localhost:${MAILPIT_HTTP_PORT:-8025}
+    PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:${HTTP_PORT:-8080}}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-}
+    SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+    MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-1073741824}
+    OWNER_MEDIA_QUOTA_BYTES: ${OWNER_MEDIA_QUOTA_BYTES:-10737418240}
+    MEDIA_CAPACITY_BYTES: ${MEDIA_CAPACITY_BYTES:-107374182400}
+    MEDIA_MIN_FREE_BYTES: ${MEDIA_MIN_FREE_BYTES:-2147483648}
+    PREVIEW_BUDGET_BYTES: ${PREVIEW_BUDGET_BYTES:-16777216}
+    MAX_UPLOADS_PER_OWNER: ${MAX_UPLOADS_PER_OWNER:-2}
+    MAX_UPLOADS_TOTAL: ${MAX_UPLOADS_TOTAL:-4}
+    MAX_PENDING_VIDEO_JOBS: ${MAX_PENDING_VIDEO_JOBS:-100}
+    UPLOAD_IDLE_TIMEOUT_SECONDS: ${UPLOAD_IDLE_TIMEOUT_SECONDS:-60}
+    UPLOAD_TIMEOUT_SECONDS: ${UPLOAD_TIMEOUT_SECONDS:-3600}
+    UPLOAD_LEASE_SECONDS: ${UPLOAD_LEASE_SECONDS:-120}
+    UPLOAD_HEARTBEAT_SECONDS: ${UPLOAD_HEARTBEAT_SECONDS:-15}
+    PROCESSING_CONCURRENCY: ${PROCESSING_CONCURRENCY:-1}
+    PROCESSING_LEASE_SECONDS: ${PROCESSING_LEASE_SECONDS:-60}
+    PROCESSING_HEARTBEAT_SECONDS: ${PROCESSING_HEARTBEAT_SECONDS:-5}
+    PROCESSING_MAX_ATTEMPTS: ${PROCESSING_MAX_ATTEMPTS:-3}
+    PROCESSING_RETRY_SECONDS: ${PROCESSING_RETRY_SECONDS:-15}
+    PROCESSING_MEMORY_BYTES: ${PROCESSING_MEMORY_BYTES:-805306368}
+    FFPROBE_TIMEOUT_SECONDS: ${FFPROBE_TIMEOUT_SECONDS:-30}
+    PROCESSING_TIMEOUT_SECONDS: ${PROCESSING_TIMEOUT_SECONDS:-900}
+    MAX_VIDEO_DURATION_SECONDS: ${MAX_VIDEO_DURATION_SECONDS:-7200}
+    MAX_VIDEO_LONG_SIDE: ${MAX_VIDEO_LONG_SIDE:-1920}
+    MAX_VIDEO_SHORT_SIDE: ${MAX_VIDEO_SHORT_SIDE:-1080}
+    MAX_VIDEO_FPS: ${MAX_VIDEO_FPS:-60}
+    UPLOAD_LIMIT_PER_HOUR: ${UPLOAD_LIMIT_PER_HOUR:-30}
+    UPLOAD_CLEANUP_INTERVAL_SECONDS: ${UPLOAD_CLEANUP_INTERVAL_SECONDS:-15}
+    VIDEO_CREATE_LIMIT_PER_HOUR: ${VIDEO_CREATE_LIMIT_PER_HOUR:-30}
+    VIDEO_WRITE_LIMIT_PER_MINUTE: ${VIDEO_WRITE_LIMIT_PER_MINUTE:-120}
+    INTERACTION_WRITE_LIMIT_PER_MINUTE: ${INTERACTION_WRITE_LIMIT_PER_MINUTE:-120}
+    COMMENT_CREATE_LIMIT_PER_MINUTE: ${COMMENT_CREATE_LIMIT_PER_MINUTE:-10}
+    PLAYLIST_WRITE_LIMIT_PER_MINUTE: ${PLAYLIST_WRITE_LIMIT_PER_MINUTE:-120}
+    PLAYLIST_CREATE_LIMIT_PER_HOUR: ${PLAYLIST_CREATE_LIMIT_PER_HOUR:-30}
+    PLAYLIST_MAX_ITEMS: ${PLAYLIST_MAX_ITEMS:-1000}
+    REPORT_CREATE_LIMIT_PER_HOUR: ${REPORT_CREATE_LIMIT_PER_HOUR:-10}
+    ADMIN_WRITE_LIMIT_PER_MINUTE: ${ADMIN_WRITE_LIMIT_PER_MINUTE:-30}
+    MODERATION_WRITE_LIMIT_PER_MINUTE: ${MODERATION_WRITE_LIMIT_PER_MINUTE:-120}
+  volumes:
+    - media:/data/media
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27@sha256:e22dce5b36f93c77082e204a3942fb6b283b7896e057458400a4c88344c3df68
+    logging: *bounded-logs
+    ports:
+      - "127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+    environment:
+      MP_MAX_MESSAGES: "100"
+      MP_DISABLE_VERSION_CHECK: "true"
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-bookworm
+    logging: *bounded-logs
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-video}
+      POSTGRES_USER: ${POSTGRES_USER:-video}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run bash scripts/start.sh to create .env}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    <<: *app
+    # Only Nginx is externally reachable; it replaces incoming forwarded headers.
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --proxy-headers, --forwarded-allow-ips, "*", --no-access-log]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  upload-maintenance:
+    <<: *app
+    command: [python, -m, app.uploads.maintenance]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    <<: *app
+    command: [python, -m, app.processing.worker]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    cpus: ${PROCESSING_CPUS:-1.0}
+    mem_limit: ${PROCESSING_CONTAINER_MEMORY:-2g}
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD, python, -m, app.processing.health]
+      interval: 10s
+      timeout: 6s
+      start_period: 10s
+      retries: 6
+    restart: unless-stopped
+
+  web:
+    logging: *bounded-logs
+    image: ${WEB_IMAGE:-video-platform-web:local}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.nginx
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      HSTS_HEADER: ""
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-1073741824}
+      UPLOAD_IDLE_TIMEOUT_SECONDS: ${UPLOAD_IDLE_TIMEOUT_SECONDS:-60}
+      UPLOAD_TIMEOUT_SECONDS: ${UPLOAD_TIMEOUT_SECONDS:-3600}
+      NGINX_ENVSUBST_FILTER: ^(MAX_UPLOAD_BYTES|UPLOAD_IDLE_TIMEOUT_SECONDS|UPLOAD_TIMEOUT_SECONDS|HSTS_HEADER|SITE_DOMAIN|PUBLIC_HTTPS_PORT)$$
+    volumes:
+      - ./deploy/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/video-locations.conf.template:/etc/nginx/templates/includes/video-locations.conf.template:ro
+      - media:/data/media:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -Y, "off", -q, -O, /dev/null, "http://127.0.0.1/health/ready"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  media:

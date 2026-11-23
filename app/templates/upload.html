@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Загрузка видео — {{ app_name }}{% endblock %}
+{% block scripts %}
+<script src="{{ static_url(request, '/videos.js') }}" defer></script>
+<script src="{{ static_url(request, '/processing.js') }}" defer></script>
+<script src="{{ static_url(request, '/upload.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+  <h1>Загрузить видео</h1>
+  <p>Добавьте название и выберите файл. По умолчанию видео доступно только вам и приглашённым пользователям.</p>
+  <section class="panel">
+    <form id="video-upload" data-max-bytes="{{ max_upload_bytes }}">
+      {% include "video_fields.html" %}
+      {% include "upload_fields.html" %}
+    </form>
+  </section>
+{% endblock %}

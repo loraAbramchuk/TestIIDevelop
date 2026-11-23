@@ -1,0 +1,2 @@
+# Keep upstream assets and license notices byte-for-byte; exclude them from code statistics.
+app/static/vendor/** -whitespace linguist-vendored

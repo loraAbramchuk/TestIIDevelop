@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Подписки — {{ app_name }}{% endblock %}
+{% block scripts %}<script src="{{ static_url(request, '/catalog.js') }}" defer></script>{% endblock %}
+{% block content %}
+  <h1>Мои подписки</h1>
+  {% for channel in page['items'] %}
+    <article class="video-row"><h2><a href="/channels/{{ channel.id }}">{{ channel.name }}</a></h2><p class="video-description">{{ channel.description }}</p><span>Подписчиков: {{ channel.subscriber_count }}</span></article>
+  {% else %}<p>Вы пока не подписаны на каналы. Выберите автора на главной странице.</p>{% endfor %}
+  {% if page.next_cursor %}<p><a class="next-page" href="/subscriptions?limit={{ limit }}&amp;cursor={{ page.next_cursor|urlencode }}">Следующая страница</a></p>{% endif %}
+{% endblock %}

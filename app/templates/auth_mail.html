@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Подтверждение email' if action == 'verify-email' else 'Восстановление пароля' }} — {{ app_name }}{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1>{{ 'Подтверждение email' if action == 'verify-email' else 'Восстановление пароля' }}</h1>
+  <form id="auth-mail-form" method="post" data-action="{{ action }}">
+    {% if action == 'forgot-password' %}
+      <label for="recovery-email">Email</label><input id="recovery-email" name="email" type="email" maxlength="320" autocomplete="username" required>
+      <p class="hint">Если адрес зарегистрирован, мы отправим ссылку для смены пароля.</p>
+    {% elif action == 'reset-password' %}
+      <label for="new-password">Новый пароль</label><input id="new-password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+      <label for="repeat-password">Повторите пароль</label><input id="repeat-password" name="confirmation" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+    {% else %}<p>Нажмите кнопку, чтобы подтвердить email. Открытие ссылки само по себе не подтверждает адрес.</p>{% endif %}
+    <p id="mail-progress" role="status" hidden>Ожидаем ответ…</p>
+    <p id="mail-error" class="error" role="alert"></p><p id="mail-success" class="success" role="status"></p>
+    <button type="submit">{{ 'Отправить ссылку' if action == 'forgot-password' else 'Сохранить пароль' if action == 'reset-password' else 'Подтвердить email' }}</button>
+  </form>
+  <p><a href="/login">Войти</a> · <a href="/">На главную</a></p>
+  <noscript>Для подтверждения и восстановления включите JavaScript. Данные формы не передаются в адресной строке.</noscript>
+</section>
+{% endblock %}

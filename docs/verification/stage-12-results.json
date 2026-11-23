@@ -1,0 +1,173 @@
+{
+  "format": 1,
+  "source_fingerprint": "9aeabd6749f7051aceb4298e93008f6d3406906eb7d936fa3f74c19eab6c370a",
+  "created_at": "2026-11-19T17:43:08.320469+00:00",
+  "checks": {
+    "metrics": {
+      "status": "passed",
+      "samples": [
+        {
+          "name": "720p",
+          "width": 1280,
+          "height": 720,
+          "duration_seconds": 8,
+          "input_bytes": 7545009,
+          "upload_seconds": 0.1728,
+          "accepted_to_ready_seconds": 2.4077
+        },
+        {
+          "name": "1080p",
+          "width": 1920,
+          "height": 1080,
+          "duration_seconds": 30,
+          "input_bytes": 58389387,
+          "upload_seconds": 0.6746,
+          "accepted_to_ready_seconds": 4.9986
+        },
+        {
+          "name": "portrait",
+          "width": 720,
+          "height": 1280,
+          "duration_seconds": 12,
+          "input_bytes": 11481738,
+          "upload_seconds": 0.1686,
+          "accepted_to_ready_seconds": 2.3183
+        }
+      ],
+      "uploads": {
+        "parallel_uploads": 4,
+        "accepted": 4,
+        "fifth_status": 429,
+        "processing_concurrency": 1
+      },
+      "views": {
+        "ranges": [
+          {
+            "concurrent_clients": 1,
+            "range_requests": 12,
+            "range_bytes": 131072,
+            "errors": 0,
+            "seconds": 0.0862,
+            "p50_ms": 5.924,
+            "p95_ms": 19.855,
+            "requests_per_second": 139.27
+          },
+          {
+            "concurrent_clients": 4,
+            "range_requests": 48,
+            "range_bytes": 131072,
+            "errors": 0,
+            "seconds": 0.2167,
+            "p50_ms": 18.019,
+            "p95_ms": 25.121,
+            "requests_per_second": 221.46
+          },
+          {
+            "concurrent_clients": 8,
+            "range_requests": 96,
+            "range_bytes": 131072,
+            "errors": 0,
+            "seconds": 0.6348,
+            "p50_ms": 38.698,
+            "p95_ms": 174.762,
+            "requests_per_second": 151.23
+          },
+          {
+            "concurrent_clients": 16,
+            "range_requests": 192,
+            "range_bytes": 131072,
+            "errors": 0,
+            "seconds": 1.4201,
+            "p50_ms": 86.355,
+            "p95_ms": 279.495,
+            "requests_per_second": 135.2
+          }
+        ],
+        "complete_mp4": [
+          {
+            "concurrent_clients": 1,
+            "bytes": 58389387,
+            "seconds": 0.291,
+            "mib_per_second": 191.33,
+            "hashes_match": true
+          },
+          {
+            "concurrent_clients": 4,
+            "bytes": 233557548,
+            "seconds": 1.1699,
+            "mib_per_second": 190.38,
+            "hashes_match": true
+          },
+          {
+            "concurrent_clients": 8,
+            "bytes": 467115096,
+            "seconds": 2.8255,
+            "mib_per_second": 157.66,
+            "hashes_match": true
+          }
+        ]
+      },
+      "conditions": {
+        "network": "loopback",
+        "cache": "warm",
+        "worker_cpu_affinity": 1,
+        "logical_cpus_available": 5,
+        "upload_limit_bytes": 67108864,
+        "free_disk_bytes": 2916995072
+      }
+    },
+    "browser": {
+      "status": "passed",
+      "engine": "Chromium 156.0.8078.79",
+      "checks": [
+        "Six actors, all main screens, real thumbnails/search/playback/audio/seek, responsive widths and keyboard",
+        "Likes, literal HTML comment, subscription, playlist reorder and role-specific management screens",
+        "Channel edit, grant/revoke UI, subscriptions page, report decision, hide/restore, admin role change and immediate session permissions",
+        "Open signup → real queued SMTP email → explicit confirmation → private upload; recovery email → password reset → all old sessions invalid → new login"
+      ],
+      "errors": [],
+      "optional_browsers": {
+        "firefox": "unrun",
+        "webkit": "unrun"
+      }
+    },
+    "faults": {
+      "status": "passed",
+      "cases": [
+        "Six-actor private access matrix; grant revoke during parallel Range reads",
+        "User/moderator/admin permissions and private grants remain independent",
+        "SIGKILL during actual FFmpeg/ffprobe; child killed, fenced retry reaches ready",
+        "SIGKILL between SMTP acceptance and acknowledgement; same one-use link retried safely",
+        "Only the isolated PostgreSQL stopped/restarted; live stays 200, readiness/API 503, bytes survive",
+        "Configured low-space reserve rejects 507; real read-only directories degrade writes while ready/media stay available",
+        "Deletion during actual media processing fences old work and immediately closes new reads"
+      ]
+    },
+    "tests": {
+      "status": "passed",
+      "passed": 563,
+      "failed": 0,
+      "skipped": 0
+    },
+    "policy": {
+      "status": "passed",
+      "registration": "open",
+      "email_verification": true,
+      "password_recovery": true,
+      "backup_retention_days": 30,
+      "deletion": "Immediate access revocation; asynchronous physical cleanup; backups may retain deleted data up to 30 days"
+    },
+    "logs": {
+      "status": "passed",
+      "files": 7,
+      "checked_canaries": 91,
+      "exception": "Private fixture context/captured mail are 0600 and intentionally contain synthetic links"
+    }
+  },
+  "external": {
+    "ubuntu_vm_systemd": "unrun",
+    "public_acme_renewal": "unrun",
+    "offsite_restore": "unrun",
+    "production_smtp": "unrun"
+  }
+}

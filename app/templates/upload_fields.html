@@ -1,0 +1,14 @@
+<label for="video-file">Видеофайл</label>
+<input type="file" id="video-file" name="file" accept="video/*,.mp4" required aria-describedby="file-hint">
+<p id="file-hint" class="hint">До {{ (max_upload_bytes / 1024 / 1024)|round(1) }} МиБ. Базовый профиль — MP4, H.264 и AAC. Формат проверяется при обработке. При повторе файл передаётся с начала.</p>
+<progress id="upload-progress" value="0" max="100" aria-label="Передача файла" hidden></progress>
+<p id="upload-status" role="status" aria-live="polite"></p>
+<p class="error" role="alert" data-error></p>
+<p id="upload-processing-error" class="error" role="alert"></p>
+<div class="upload-actions">
+  <button type="submit">Загрузить</button>
+  <button type="button" id="upload-cancel" class="secondary" hidden>Отменить передачу</button>
+  <button type="button" id="upload-check" class="secondary" hidden>Проверить статус</button>
+</div>
+<a id="upload-manage" hidden>Управление видео и доступом</a>
+<a id="upload-watch" hidden>Смотреть видео</a>

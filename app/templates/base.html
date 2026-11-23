@@ -1,0 +1,89 @@
+{% from "icons.html" import icon %}
+{% set current_path = request.url.path %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#ffffff">
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <link rel="icon" href="{{ static_url(request, '/favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ static_url(request, '/styles.css') }}">
+    <script src="{{ static_url(request, '/navigation.js') }}" defer></script>
+    <script src="{{ static_url(request, '/auth.js') }}" defer></script>
+    <script src="{{ static_url(request, '/api.js') }}" defer></script>
+    <script src="{{ static_url(request, '/auth-mail.js') }}" defer></script>
+    {% block scripts %}{% endblock %}
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">К содержимому</a>
+    <header class="site-header">
+      <div class="header-brand">
+        <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Открыть меню" aria-controls="sidebar" aria-expanded="false" hidden>{{ icon('menu') }}</button>
+        <a class="brand" href="/" aria-label="{{ app_name }} — главная">
+          <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 24" fill="none"><rect width="32" height="24" rx="7" fill="currentColor"/><path d="m13 7 9 5-9 5V7Z" fill="white"/></svg></span>
+          <span>{{ app_name }}</span>
+        </a>
+      </div>
+      <form class="site-search" action="/search" method="get" role="search">
+        <input type="search" name="q" maxlength="200" aria-label="Поиск по названию" placeholder="Введите название видео" value="{{ search_query|default('') }}">
+        <button type="submit" aria-label="Найти">{{ icon('search') }}</button>
+      </form>
+      <nav class="header-actions" aria-label="Аккаунт">
+        <a class="create-link" href="/upload" aria-label="Загрузить видео">{{ icon('plus') }}<span>Загрузить</span></a>
+        {% if user %}
+          <details class="account-menu">
+            <summary aria-label="Меню аккаунта"><span class="avatar user-avatar" aria-hidden="true">{{ user.display_name[:1]|upper }}</span><span class="account-name">{{ user.display_name }}</span></summary>
+            <div class="account-dropdown"><strong>{{ user.display_name }}</strong><span class="hint">Ваш аккаунт</span><button type="button" id="logout">{{ icon('logout') }} Выйти</button></div>
+          </details>
+        {% else %}
+          <a class="sign-in" href="/login{% if next_path is defined %}?next={{ next_path|urlencode }}{% endif %}">{{ icon('user') }}<span>Войти</span></a>
+        {% endif %}
+      </nav>
+    </header>
+    <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Закрыть меню" tabindex="-1" hidden></button>
+    <aside class="sidebar" id="sidebar" tabindex="-1" aria-label="Меню сайта">
+      <div class="sidebar-mobile-heading"><span>Навигация</span><button class="icon-button" id="sidebar-close" type="button" aria-label="Закрыть меню">{{ icon('close') }}</button></div>
+      <nav aria-label="Основная навигация">
+        <div class="nav-group">
+          <a href="/" {% if current_path == '/' %}aria-current="page"{% endif %}>{{ icon('home') }}<span>Главная</span></a>
+          <a href="/search" {% if current_path == '/search' %}aria-current="page"{% endif %}>{{ icon('compass') }}<span>Обзор</span></a>
+          <a href="/subscriptions" {% if current_path == '/subscriptions' %}aria-current="page"{% endif %}>{{ icon('subscriptions') }}<span>Подписки</span></a>
+        </div>
+        <div class="nav-group">
+          <p class="nav-heading">Ваша коллекция</p>
+          <a href="/my-channel" {% if user and channel is defined and channel.owner_id == user.id %}aria-current="page"{% endif %}>{{ icon('channel') }}<span>Мой канал</span></a>
+          <a href="/studio" {% if current_path.startswith('/studio') %}aria-current="page"{% endif %}>{{ icon('video') }}<span>Мои видео</span></a>
+          <a href="/my-playlists" {% if current_path == '/my-playlists' or current_path.startswith('/playlists/') %}aria-current="page"{% endif %}>{{ icon('playlist') }}<span>Плейлисты</span></a>
+          <a href="/upload" {% if current_path == '/upload' %}aria-current="page"{% endif %}>{{ icon('upload') }}<span>Загрузить</span></a>
+        </div>
+        {% if user and user.role in ['moderator', 'admin'] %}
+        <div class="nav-group">
+          <p class="nav-heading">Управление</p>
+          <a href="/moderation" {% if current_path.startswith('/moderation') %}aria-current="page"{% endif %}>{{ icon('shield') }}<span>Модерация</span></a>
+          {% if user.role == 'admin' %}<a href="/admin/users" data-admin-nav {% if current_path.startswith('/admin') %}aria-current="page"{% endif %}>{{ icon('users') }}<span>Пользователи</span></a>{% endif %}
+        </div>
+        {% endif %}
+      </nav>
+      {% if not user %}
+      <div class="sidebar-welcome"><p>Войдите, чтобы подписываться на авторов и сохранять видео.</p><a href="/register{% if next_path is defined %}?next={{ next_path|urlencode }}{% endif %}">Создать аккаунт {{ icon('arrow') }}</a></div>
+      {% endif %}
+      <div class="sidebar-footer"><span class="footer-brand">{{ app_name }}</span><p>Смотрите. Создавайте. Делитесь.</p></div>
+    </aside>
+    <noscript><nav class="noscript-navigation" aria-label="Разделы"><a href="/">Главная</a><a href="/subscriptions">Подписки</a><a href="/upload">Загрузить</a></nav></noscript>
+    <main id="main-content" tabindex="-1">
+      {% if request.app.state.settings.local_mail %}
+        <p class="hint">Локальная проверка: письма подтверждения и восстановления доступны в <a href="{{ request.app.state.settings.mailpit_ui_url }}" target="_blank" rel="noopener noreferrer">тестовом почтовом ящике</a>. На настоящие адреса они не отправляются.</p>
+      {% endif %}
+      {% if user and request.app.state.settings.auth_require_verified_email and not user.email_verified %}
+        <section class="panel" aria-label="Подтверждение email"><p>Подтвердите email, чтобы загружать видео и пользоваться действиями аккаунта.</p><button type="button" id="verification-resend">Отправить письмо подтверждения</button><p id="verification-status" role="status"></p><p id="verification-error" class="error" role="alert"></p></section>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+    <div id="session-notice" class="session-notice" hidden>
+      <p id="session-status" class="hint" role="status" hidden></p>
+      <p id="session-error" role="alert" class="error"></p>
+      <button id="logout-check" type="button" class="secondary" hidden>Проверить выход</button>
+    </div>
+  </body>
+</html>

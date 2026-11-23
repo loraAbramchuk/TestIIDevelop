@@ -1,0 +1,63 @@
+import uuid
+from datetime import datetime
+
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db import Base
+
+
+class User(Base):
+    """Учётная запись; публичная регистрация всегда назначает роль user."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        Index("ix_users_page", "created_at", "id"),
+        Index("ix_users_role_page", "role", "created_at", "id"),
+        CheckConstraint("role IN ('user', 'moderator', 'admin')", name="valid_role"),
+        CheckConstraint("email = lower(email)", name="email_lowercase"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    display_name: Mapped[str] = mapped_column(String(100))
+    role: Mapped[str] = mapped_column(String(16), server_default=text("'user'"))
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True).evaluates_none(), default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class AuthRateLimit(Base):
+    __tablename__ = "auth_rate_limits"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempts: Mapped[int]
+    resets_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+# Import domain models so Alembic and the application use the same complete metadata.
+from app.audit.models import AuditEvent  # noqa: E402, F401
+from app.channels.models import Channel, Subscription  # noqa: E402, F401
+from app.interactions.models import Comment, Like  # noqa: E402, F401
+from app.mail.models import AuthMailToken  # noqa: E402, F401
+from app.moderation.models import Report  # noqa: E402, F401
+from app.playlists.models import Playlist, PlaylistItem  # noqa: E402, F401
+from app.processing.models import ProcessingRun, ProcessingWorker  # noqa: E402, F401
+from app.uploads.models import UploadAdmission, UploadAttempt  # noqa: E402, F401
+from app.videos.models import Video, VideoGrant  # noqa: E402, F401

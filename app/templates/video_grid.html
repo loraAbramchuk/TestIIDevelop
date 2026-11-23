@@ -1,0 +1,17 @@
+{% from "icons.html" import duration %}
+{% if not playlist_grid_contents|default(false) %}<section class="video-grid" aria-label="Видео">{% endif %}
+  {% for video in page['items'] %}
+    <article class="video-card" data-video-id="{{ video.id }}">
+      <a class="card-preview" href="/watch/{{ video.id }}"><img src="{{ video.thumbnail_url }}" alt="Превью: {{ video.title }}" loading="lazy"><span class="card-duration">{{ duration(video.duration_seconds) }}</span>{% if video.visibility == 'private' %}<span class="card-private">По приглашению</span>{% endif %}</a>
+      <div class="card-body">
+        <span class="avatar card-avatar" data-channel-avatar data-channel-id="{{ video.author.id }}" aria-hidden="true">{{ video.author.name[:1]|upper }}</span>
+        <div class="card-copy">
+          <h2><a href="/watch/{{ video.id }}">{{ video.title }}</a></h2>
+          <a class="card-author" data-channel-label data-channel-id="{{ video.author.id }}" href="/channels/{{ video.author.id }}">{{ video.author.name }}</a>
+          <p class="hint">{{ video.created_at.strftime('%d.%m.%Y') }}{% if video.visibility == 'private' %} · Приватное видео{% endif %}</p>
+          {% if playlist_manage|default(false) %}<div class="playlist-actions"><button type="button" data-move-up>Выше</button><button type="button" data-move-down>Ниже</button><button type="button" class="secondary" data-remove-video>Убрать из плейлиста</button></div>{% endif %}
+        </div>
+      </div>
+    </article>
+  {% endfor %}
+{% if not playlist_grid_contents|default(false) %}</section>{% endif %}

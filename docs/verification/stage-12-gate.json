@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "local_acceptance": "passed",
+  "public_release": "blocked",
+  "checks": {
+    "tests": "passed",
+    "browser": "passed",
+    "metrics": "passed",
+    "faults": "passed",
+    "logs": "passed",
+    "policy": "passed"
+  },
+  "external": {
+    "ubuntu_vm_systemd": "unrun",
+    "public_acme_renewal": "unrun",
+    "offsite_restore": "unrun",
+    "production_smtp": "unrun"
+  },
+  "local_reasons": [],
+  "public_reasons": [
+    "ubuntu_vm_systemd: unrun",
+    "public_acme_renewal: unrun",
+    "offsite_restore: unrun",
+    "production_smtp: unrun"
+  ],
+  "published": false
+}
