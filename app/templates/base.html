@@ -72,6 +72,9 @@
     </aside>
     <noscript><nav class="noscript-navigation" aria-label="Разделы"><a href="/">Главная</a><a href="/subscriptions">Подписки</a><a href="/upload">Загрузить</a></nav></noscript>
     <main id="main-content" tabindex="-1">
+      {% if request.app.state.settings.local_mail %}
+        <p class="hint">Локальная проверка: письма подтверждения и восстановления доступны в <a href="{{ request.app.state.settings.mailpit_ui_url }}" target="_blank" rel="noopener noreferrer">тестовом почтовом ящике</a>. На настоящие адреса они не отправляются.</p>
+      {% endif %}
       {% if user and request.app.state.settings.auth_require_verified_email and not user.email_verified %}
         <section class="panel" aria-label="Подтверждение email"><p>Подтвердите email, чтобы загружать видео и пользоваться действиями аккаунта.</p><button type="button" id="verification-resend">Отправить письмо подтверждения</button><p id="verification-status" role="status"></p><p id="verification-error" class="error" role="alert"></p></section>
       {% endif %}

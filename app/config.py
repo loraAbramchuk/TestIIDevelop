@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,10 @@ class Settings(BaseSettings):
     session_lifetime_hours: int = Field(default=336, ge=1, le=2160)
     auth_require_verified_email: bool = True
     auth_mail_secret: SecretStr | None = Field(default=None, min_length=32)
+    mail_backend: Literal["auto", "smtp", "mailpit"] = "auto"
+    mailpit_host: str = "127.0.0.1"
+    mailpit_port: int = Field(default=1025, ge=1, le=65535)
+    mailpit_ui_url: str = "http://localhost:8025"
     public_base_url: str = "http://localhost:8080"
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -104,6 +109,24 @@ class Settings(BaseSettings):
                 raise ValueError("Invalid SMTP_FROM") from None
         if self.smtp_username and not self.smtp_password:
             raise ValueError("SMTP_PASSWORD is required with SMTP_USERNAME")
+        if self.mail_backend == "mailpit" and not self.local_mail:
+            raise ValueError("Mailpit requires a loopback HTTP origin and non-Secure local cookies")
+        if self.local_mail:
+            from app.mail.policy import LOOPBACK
+
+            if self.mailpit_host not in LOOPBACK | {"mailpit"}:
+                raise ValueError("Mailpit must use loopback or the local Compose service")
+            inbox = urlsplit(self.mailpit_ui_url)
+            if (
+                inbox.scheme != "http"
+                or inbox.hostname not in LOOPBACK
+                or inbox.username
+                or inbox.password
+                or inbox.query
+                or inbox.fragment
+                or inbox.path not in ("", "/")
+            ):
+                raise ValueError("MAILPIT_UI_URL must be a loopback HTTP origin")
         if self.mail_configured and self.auth_cookie_secure and base.scheme != "https":
             raise ValueError("Secure deployments require an HTTPS PUBLIC_BASE_URL")
         if max(self.media_capacity_bytes, self.upload_reservation_bytes()) > 2**63 - 1:
@@ -125,8 +148,18 @@ class Settings(BaseSettings):
         return self
 
     @property
+    def local_mail(self) -> bool:
+        from app.mail.policy import uses_mailpit
+
+        return uses_mailpit(
+            self.mail_backend, self.smtp_host, self.auth_cookie_secure, self.public_base_url
+        )
+
+    @property
     def mail_configured(self) -> bool:
-        return bool(self.auth_mail_secret and self.smtp_host and self.smtp_from)
+        return bool(
+            self.auth_mail_secret and (self.local_mail or self.smtp_host and self.smtp_from)
+        )
 
     def upload_reservation_bytes(self, content_length: int | None = None) -> int:
         size = self.max_upload_bytes if content_length is None else content_length

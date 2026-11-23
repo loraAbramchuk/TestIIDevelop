@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "registration": 201,
+  "first_login": 200,
+  "email_confirmation": "passed via real Mailpit",
+  "password_recovery": "passed",
+  "docker_seed": "passed twice, no duplicates",
+  "public_playable_videos": 3,
+  "private_video": "passed",
+  "all_roles": "passed in Chromium",
+  "production_capture": "disabled",
+  "full_tests_log": "tests.log"
+}

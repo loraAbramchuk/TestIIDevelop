@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
-from init_env import create_env
+from init_env import create_env, prepare_mail
 from ops_storage import (
     ARCHIVE_OVERHEAD,
     DEFAULT_RESERVE,
@@ -39,6 +39,9 @@ from ops_storage import (
 
 WRITERS = ("web", "app", "worker", "upload-maintenance")
 PAYLOADS = {"config.env", "database.dump", "media.tar", "tls.tar"}
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.mail.policy import uses_mailpit  # noqa: E402
 
 
 def run(command, *, stdin=None, stdout=None, binary=False, timeout=3600, check=True, env=None):
@@ -331,8 +334,32 @@ class Operations:
         return data
 
     def start(self, *, build=True):
+        environment = self.config()["services"]["app"]["environment"]
+        local_mail = uses_mailpit(
+            environment.get("MAIL_BACKEND", "auto"),
+            environment.get("SMTP_HOST", ""),
+            str(environment.get("AUTH_COOKIE_SECURE", "false")).lower()
+            in ("1", "true", "yes", "on"),
+            environment.get("PUBLIC_BASE_URL", "http://localhost:8080"),
+        )
+        if local_mail and not environment.get("AUTH_MAIL_SECRET"):
+            prepare_mail(self.env_file)
+        elif (
+            not local_mail
+            and str(environment.get("AUTH_REQUIRE_VERIFIED_EMAIL", "true")).lower()
+            in ("1", "true", "yes", "on")
+            and not all(
+                environment.get(name) for name in ("AUTH_MAIL_SECRET", "SMTP_HOST", "SMTP_FROM")
+            )
+        ):
+            raise OpsError(
+                "SMTP is incomplete: set AUTH_MAIL_SECRET, SMTP_HOST and SMTP_FROM; "
+                "local HTTP uses Mailpit automatically. See docs/email.md."
+            )
         if build:
             self.compose("build", "app", "web")
+        if not local_mail:
+            self.compose("stop", "mailpit", mode="local", check=False)
         with self.quiesce(resume=False):
             try:
                 self.compose(
@@ -342,6 +369,7 @@ class Operations:
                     "--wait",
                     "--wait-timeout",
                     "180",
+                    *(["mailpit"] if local_mail else []),
                     "db",
                     "migrate",
                     "app",
@@ -370,6 +398,12 @@ class Operations:
             deployed_at=datetime.now(UTC).isoformat(),
         )
         print("Services are ready; diagnostics status=ok")
+        print("Website: " + environment.get("PUBLIC_BASE_URL", "http://localhost:8080"))
+        if local_mail:
+            print(
+                "Local confirmation/recovery inbox: "
+                + environment.get("MAILPIT_UI_URL", "http://localhost:8025")
+            )
 
     def sql(self, statement):
         db = self.config()["services"]["db"]["environment"]
