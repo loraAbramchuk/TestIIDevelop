@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
-from init_env import create_env
+from init_env import create_env, prepare_mail
 from ops_storage import (
     ARCHIVE_OVERHEAD,
     DEFAULT_RESERVE,
@@ -39,6 +39,9 @@ from ops_storage import (
 
 WRITERS = ("web", "app", "worker", "upload-maintenance")
 PAYLOADS = {"config.env", "database.dump", "media.tar", "tls.tar"}
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.mail.policy import uses_mailpit  # noqa: E402
 
 
 def run(command, *, stdin=None, stdout=None, binary=False, timeout=3600, check=True, env=None):
@@ -215,6 +218,7 @@ class Operations:
         self.directory = self.root / ".local" / "operations" / self.project
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.state_file = self.directory / "state.json"
+        self._compose_env = None
 
     def command(self, *, mode=None):
         mode = mode or ("production" if self.args.production else "local")
@@ -235,6 +239,8 @@ class Operations:
         return command
 
     def compose(self, *args, mode=None, **kwargs):
+        if self._compose_env is not None:
+            kwargs.setdefault("env", self._compose_env)
         return run(self.command(mode=mode) + list(args), **kwargs)
 
     def config(self):
@@ -245,7 +251,8 @@ class Operations:
         command = self.command(mode="local")
         if env_file is not None:
             command[command.index("--env-file") + 1] = str(env_file)
-        output = run(command + ["config", "--environment"])
+        options = {"env": self._compose_env} if self._compose_env is not None else {}
+        output = run(command + ["config", "--environment"], **options)
         return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
 
     def state(self):
@@ -331,8 +338,45 @@ class Operations:
         return data
 
     def start(self, *, build=True):
+        self._compose_env = None
+        environment = self.config()["services"]["app"]["environment"]
+        local_mail = uses_mailpit(
+            environment.get("MAIL_BACKEND", "auto"),
+            environment.get("SMTP_HOST", ""),
+            str(environment.get("AUTH_COOKIE_SECURE", "false")).lower()
+            in ("1", "true", "yes", "on"),
+            environment.get("PUBLIC_BASE_URL", "http://localhost:8080"),
+        )
+        if local_mail and not environment.get("AUTH_MAIL_SECRET"):
+            prepare_mail(self.env_file)
+            # An empty inherited placeholder otherwise masks the generated file key.
+            # Keep the caller's environment and non-empty overrides unchanged.
+            if os.environ.get("AUTH_MAIL_SECRET") == "":
+                self._compose_env = os.environ.copy()
+                self._compose_env.pop("AUTH_MAIL_SECRET")
+            environment = self.config()["services"]["app"]["environment"]
+        verification_required = str(
+            environment.get("AUTH_REQUIRE_VERIFIED_EMAIL", "true")
+        ).lower() in ("1", "true", "yes", "on")
+        secret = environment.get("AUTH_MAIL_SECRET", "")
+        if (local_mail or verification_required) and (len(secret) < 32 or not secret.strip()):
+            raise OpsError(
+                "AUTH_MAIL_SECRET is missing or invalid in the effective Compose configuration; "
+                "check environment overrides. Existing credentials were not replaced."
+            )
+        if (
+            not local_mail
+            and verification_required
+            and not all(environment.get(name) for name in ("SMTP_HOST", "SMTP_FROM"))
+        ):
+            raise OpsError(
+                "SMTP is incomplete: set AUTH_MAIL_SECRET, SMTP_HOST and SMTP_FROM; "
+                "local HTTP uses Mailpit automatically. See docs/email.md."
+            )
         if build:
             self.compose("build", "app", "web")
+        if not local_mail:
+            self.compose("stop", "mailpit", mode="local", check=False)
         with self.quiesce(resume=False):
             try:
                 self.compose(
@@ -342,13 +386,16 @@ class Operations:
                     "--wait",
                     "--wait-timeout",
                     "180",
+                    *(["mailpit"] if local_mail else []),
                     "db",
                     "migrate",
                     "app",
                     "worker",
                     "upload-maintenance",
                 )
-                self.check()
+                diagnostic = self.check()
+                if verification_required and diagnostic.get("mail_delivery") != "configured":
+                    raise OpsError("Mail delivery is not configured in the running app")
                 self.compose(
                     "up",
                     "--no-deps",
@@ -370,6 +417,12 @@ class Operations:
             deployed_at=datetime.now(UTC).isoformat(),
         )
         print("Services are ready; diagnostics status=ok")
+        print("Website: " + environment.get("PUBLIC_BASE_URL", "http://localhost:8080"))
+        if local_mail:
+            print(
+                "Local confirmation/recovery inbox: "
+                + environment.get("MAILPIT_UI_URL", "http://localhost:8025")
+            )
 
     def sql(self, statement):
         db = self.config()["services"]["db"]["environment"]

@@ -37,9 +37,9 @@ Worker проверяет профиль, подготавливает MP4/пр�
 [кандидат 0.2.0](docs/releases/0.2.0.md),
 [подтверждение email и восстановление пароля](docs/email.md).
 Регистрация остаётся открытой; до изменения контента новый аккаунт подтверждает
-email. Для писем нужен настроенный SMTP: провайдер не выбран, доставка проверяется
-на изолированном loopback SMTP-сервере. Старый `.env` не дополняется секретами
-молча — используйте `python3 scripts/init_env.py --prepare-mail` и инструкцию.
+email. Локальный запуск включает Mailpit: внешний SMTP для проверки не нужен.
+Указанный SMTP используется приоритетно; публичный HTTPS-профиль требует
+настоящего провайдера. [Регистрация из коробки и demo seed](docs/first-run.md).
 
 ## Интерфейс
 
@@ -69,6 +69,29 @@ bash scripts/start.sh
 миграции отдельным контейнером и ожидает готовности приложения, worker и Nginx.
 Существующая конфигурация сохраняется. `.env` не коммитится.
 
+Откройте **http://localhost:8080** и зарегистрируйтесь. Письмо подтверждения
+находится в **http://localhost:8025** (Mailpit); ссылка на ящик есть на страницах.
+Перейдите по ссылке из письма и нажмите «Подтвердить email». Вход доступен сразу,
+изменение контента — после подтверждения. Восстановление проверяется там же.
+Mailpit не отправляет письма на настоящие адреса; его порты доступны на loopback.
+Если в старом локальном `.env` отсутствует ключ писем, launcher добавляет его,
+сохраняя пароли и остальные настройки. Повторный запуск сохраняет ключ.
+
+Для наполнения работающего локального приложения демонстрационными данными:
+
+```bash
+docker compose exec app python -m app.seed --demo
+```
+
+Seed создаёт четыре аккаунта, три публичных и одно приватное видео с реальными
+превью, канал, плейлист, подписку, лайк, комментарий и жалобу. Видео загружаются
+через API и обрабатываются worker. Начальный пароль всех **demo**-аккаунтов —
+`DemoVideo2026!`; email: `creator@demo.example.com`, `viewer@demo.example.com`,
+`moderator@demo.example.com`, `admin@demo.example.com`. Их роли соответственно
+user/user/moderator/admin, адреса подтверждены доверенным локальным seed.
+Повтор не дублирует данные и не сбрасывает пароли/роли. Seed не запускается
+автоматически и запрещён для production SMTP/HTTPS. Подробности: [first-run.md](docs/first-run.md).
+
 На своей машине откройте порт 8080: главная `/`, Swagger `/docs`, схема
 `/openapi.json`. Порт привязан только к loopback. Изменить порт можно через
 `HTTP_PORT` в `.env`. БД и Python-приложение не публикуют порты наружу.
@@ -81,17 +104,37 @@ Swagger UI 5.35.0, стили и favicon включены в приложени�
 
 ## Разработка без пересборки образа
 
-Нужны Python 3.12 и [uv](https://docs.astral.sh/uv/). Из корня репозитория:
+Нужны Python 3.12, [uv](https://docs.astral.sh/uv/), Linux и FFmpeg/ffprobe
+в PATH. Из корня репозитория подготовьте зависимости и БД:
 
 ```bash
 python3 scripts/init_env.py
 uv sync --locked
-docker compose -f compose.yaml -f compose.dev.yaml up -d --wait db
+docker compose -p video-platform-dev -f compose.yaml -f compose.dev.yaml up -d --wait db mailpit
 uv run --locked alembic upgrade head
-uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+Затем запустите три процесса в отдельных терминалах из корня репозитория.
+Одинаковый `PUBLIC_BASE_URL` нужен API и worker, чтобы ссылки из писем открывали
+работающий сайт. Эти команды не меняют настройки Docker в `.env`.
+
+```bash
+# Терминал 1 — сайт: http://localhost:8000
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# Терминал 2 — обработка видео и доставка писем
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.processing.worker
+# Терминал 3 — очистка и восстановление зависших заданий
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.uploads.maintenance
+```
+
+Письма подтверждения и восстановления доступны на http://localhost:8025.
+Worker должен работать и для доставки писем, и для выполнения seed.
+
 `compose.dev.yaml` открывает PostgreSQL только на `127.0.0.1:5432`.
+Этот режим использует отдельные volumes проекта `video-platform-dev`.
+Перед переходом с полного Docker-запуска остановите его (`docker compose stop`),
+чтобы освободить порты Mailpit. Не подключайте host-worker к БД другого
+работающего стека с отдельным media volume.
 Приложение читает `.env`, `DB_HOST` по умолчанию — `localhost`. Локальные файлы
 хранятся в игнорируемом `.local/media`. Каталог видео не подключён как публичная
 статика. Контейнерный вариант использует отдельный постоянный volume `media`.
@@ -431,9 +474,9 @@ stream-copy в MP4 с faststart, проверяет полное декодир�
 0006 и отдельные процессы worker/maintenance:
 
 ```bash
-uv run --locked python -m app.processing.worker
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.processing.worker
 # В другом терминале:
-uv run --locked python -m app.uploads.maintenance
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.uploads.maintenance
 ```
 
 Настройки перечислены в `.env.example` и [политике видео](docs/video-policy.md).

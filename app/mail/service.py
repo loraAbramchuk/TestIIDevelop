@@ -147,7 +147,7 @@ def deliver(settings, sessions, token_id):
             + token_value(settings, record.id, purpose)
         )
         message = EmailMessage()
-        message["From"] = settings.smtp_from
+        message["From"] = "noreply@video.example.com" if settings.local_mail else settings.smtp_from
         message["To"] = user.email
         message["Subject"] = (
             "Подтвердите email" if purpose == "verify_email" else "Восстановление пароля"
@@ -158,14 +158,17 @@ def deliver(settings, sessions, token_id):
             + "Если вы не запрашивали письмо, проигнорируйте его.\n"
         )
     try:
-        transport = smtplib.SMTP_SSL if settings.smtp_security == "tls" else smtplib.SMTP
+        security = "plain" if settings.local_mail else settings.smtp_security
+        host = settings.mailpit_host if settings.local_mail else settings.smtp_host
+        port = settings.mailpit_port if settings.local_mail else settings.smtp_port
+        transport = smtplib.SMTP_SSL if security == "tls" else smtplib.SMTP
         options = {"timeout": settings.smtp_timeout_seconds}
-        if settings.smtp_security == "tls":
+        if security == "tls":
             options["context"] = ssl.create_default_context()
-        with transport(settings.smtp_host, settings.smtp_port, **options) as smtp:
-            if settings.smtp_security == "starttls":
+        with transport(host, port, **options) as smtp:
+            if security == "starttls":
                 smtp.starttls(context=ssl.create_default_context())
-            if settings.smtp_username:
+            if settings.smtp_username and not settings.local_mail:
                 smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
             smtp.send_message(message)
     except (OSError, smtplib.SMTPException, ValueError):

@@ -1,8 +1,23 @@
 # Docker Compose >= 2.24.4 is required for !override.
 services:
+  mailpit:
+    profiles: [local-mail]
   app:
     environment:
       AUTH_COOKIE_SECURE: "true"
+      MAIL_BACKEND: smtp
+  worker:
+    environment:
+      AUTH_COOKIE_SECURE: "true"
+      MAIL_BACKEND: smtp
+  upload-maintenance:
+    environment:
+      AUTH_COOKIE_SECURE: "true"
+      MAIL_BACKEND: smtp
+  migrate:
+    environment:
+      AUTH_COOKIE_SECURE: "true"
+      MAIL_BACKEND: smtp
   web:
     ports: !override
       - "${PUBLIC_BIND_ADDRESS:-0.0.0.0}:${HTTP_PUBLIC_PORT:-80}:80"

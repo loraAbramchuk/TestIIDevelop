@@ -1,0 +1,34 @@
+{
+  "kind": "first-run-followup",
+  "checked_tree_sha256": "3d7a19e0ff09b26a667c1854f886757d87fa49951bbb868f856d722aa47a2085",
+  "tests": {
+    "passed": 586,
+    "failed": 0,
+    "skipped": 0
+  },
+  "docker_with_empty_secret_override": {
+    "full_compose_start": "passed",
+    "registration": 201,
+    "first_login_before_confirmation": 200,
+    "confirmation": "passed",
+    "password_recovery": "passed",
+    "seed_twice": "passed",
+    "public_videos": 3,
+    "range_status": 206,
+    "browser": "passed",
+    "restart_preserves_env_and_video": "passed"
+  },
+  "host_mail": {
+    "host_api_worker_maintenance": "passed",
+    "registration": 201,
+    "email_link_matches_api_origin": true,
+    "confirmation": 200,
+    "origin": "http://localhost:18000"
+  },
+  "seed_slow_queue": {
+    "simulated_seconds": 2360,
+    "authenticated_polls": 4,
+    "temporary_session_removed": true,
+    "unrelated_sessions_preserved": true
+  }
+}
