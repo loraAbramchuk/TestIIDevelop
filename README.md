@@ -104,17 +104,37 @@ Swagger UI 5.35.0, стили и favicon включены в приложени�
 
 ## Разработка без пересборки образа
 
-Нужны Python 3.12 и [uv](https://docs.astral.sh/uv/). Из корня репозитория:
+Нужны Python 3.12, [uv](https://docs.astral.sh/uv/), Linux и FFmpeg/ffprobe
+в PATH. Из корня репозитория подготовьте зависимости и БД:
 
 ```bash
 python3 scripts/init_env.py
 uv sync --locked
-docker compose -f compose.yaml -f compose.dev.yaml up -d --wait db mailpit
+docker compose -p video-platform-dev -f compose.yaml -f compose.dev.yaml up -d --wait db mailpit
 uv run --locked alembic upgrade head
-uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+Затем запустите три процесса в отдельных терминалах из корня репозитория.
+Одинаковый `PUBLIC_BASE_URL` нужен API и worker, чтобы ссылки из писем открывали
+работающий сайт. Эти команды не меняют настройки Docker в `.env`.
+
+```bash
+# Терминал 1 — сайт: http://localhost:8000
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# Терминал 2 — обработка видео и доставка писем
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.processing.worker
+# Терминал 3 — очистка и восстановление зависших заданий
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.uploads.maintenance
+```
+
+Письма подтверждения и восстановления доступны на http://localhost:8025.
+Worker должен работать и для доставки писем, и для выполнения seed.
+
 `compose.dev.yaml` открывает PostgreSQL только на `127.0.0.1:5432`.
+Этот режим использует отдельные volumes проекта `video-platform-dev`.
+Перед переходом с полного Docker-запуска остановите его (`docker compose stop`),
+чтобы освободить порты Mailpit. Не подключайте host-worker к БД другого
+работающего стека с отдельным media volume.
 Приложение читает `.env`, `DB_HOST` по умолчанию — `localhost`. Локальные файлы
 хранятся в игнорируемом `.local/media`. Каталог видео не подключён как публичная
 статика. Контейнерный вариант использует отдельный постоянный volume `media`.
@@ -454,9 +474,9 @@ stream-copy в MP4 с faststart, проверяет полное декодир�
 0006 и отдельные процессы worker/maintenance:
 
 ```bash
-uv run --locked python -m app.processing.worker
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.processing.worker
 # В другом терминале:
-uv run --locked python -m app.uploads.maintenance
+PUBLIC_BASE_URL=http://localhost:8000 uv run --locked python -m app.uploads.maintenance
 ```
 
 Настройки перечислены в `.env.example` и [политике видео](docs/video-policy.md).

@@ -61,11 +61,16 @@ def test_local_launcher_prepares_missing_key_and_starts_mailpit(tmp_path, monkey
         SimpleNamespace(root=tmp_path, env_file=path, project="first-run", production=False)
     )
     environment = {"MAIL_BACKEND": "auto", "PUBLIC_BASE_URL": "http://localhost:8123"}
-    monkeypatch.setattr(ctx, "config", lambda: {"services": {"app": {"environment": environment}}})
+
+    def config():
+        values = dict(line.split("=", 1) for line in path.read_text().splitlines() if "=" in line)
+        return {"services": {"app": {"environment": environment | values}}}
+
+    monkeypatch.setattr(ctx, "config", config)
     calls = []
     monkeypatch.setattr(ctx, "compose", lambda *args, **kw: calls.append(args))
     monkeypatch.setattr(ctx, "quiesce", lambda **kw: contextlib.nullcontext())
-    monkeypatch.setattr(ctx, "check", lambda: {})
+    monkeypatch.setattr(ctx, "check", lambda: {"mail_delivery": "configured"})
     monkeypatch.setattr(ctx, "save", lambda **kw: None)
     monkeypatch.setattr("ops.run", lambda *a, **kw: "")
     ctx.start(build=False)
@@ -88,6 +93,7 @@ def test_incomplete_public_smtp_fails_before_build_or_stopping_services(tmp_path
                 "app": {
                     "environment": {
                         "MAIL_BACKEND": "smtp",
+                        "AUTH_MAIL_SECRET": "m" * 48,
                         "AUTH_COOKIE_SECURE": "true",
                         "PUBLIC_BASE_URL": "https://video.example.com",
                     }
@@ -100,3 +106,110 @@ def test_incomplete_public_smtp_fails_before_build_or_stopping_services(tmp_path
     )
     with pytest.raises(OpsError, match="SMTP is incomplete"):
         ctx.start()
+
+
+@pytest.mark.parametrize("inherited", ["", "kept-non-empty-key-" + "x" * 32])
+def test_launcher_uses_generated_key_for_empty_override_without_mutating_parent(
+    tmp_path, monkeypatch, inherited
+):
+    import json
+    import os
+
+    path = tmp_path / "env"
+    path.write_text("POSTGRES_PASSWORD=preserved-db-password\n")
+    ctx = Operations(
+        SimpleNamespace(root=tmp_path, env_file=path, project="empty-key", production=False)
+    )
+    monkeypatch.setenv("AUTH_MAIL_SECRET", inherited)
+    started_keys = []
+
+    def run(command, **kwargs):
+        if command[0] == "git":
+            return ""
+        child = kwargs.get("env") or os.environ
+        values = dict(line.split("=", 1) for line in path.read_text().splitlines() if "=" in line)
+        key = child.get("AUTH_MAIL_SECRET", values.get("AUTH_MAIL_SECRET", ""))
+        if "config" in command:
+            return json.dumps(
+                {
+                    "services": {
+                        "app": {
+                            "environment": {
+                                "MAIL_BACKEND": "auto",
+                                "AUTH_MAIL_SECRET": key,
+                                "PUBLIC_BASE_URL": "http://localhost:8080",
+                            }
+                        }
+                    }
+                }
+            )
+        if "up" in command:
+            started_keys.append(key)
+        return ""
+
+    monkeypatch.setattr("ops.run", run)
+    monkeypatch.setattr(ctx, "quiesce", lambda **kw: contextlib.nullcontext())
+    monkeypatch.setattr(ctx, "check", lambda: {"mail_delivery": "configured"})
+    monkeypatch.setattr(ctx, "save", lambda **kw: None)
+    ctx.start()
+    assert started_keys and all(len(key) >= 32 for key in started_keys)
+    assert os.environ["AUTH_MAIL_SECRET"] == inherited
+    if inherited:
+        assert started_keys == [inherited, inherited]
+        assert "AUTH_MAIL_SECRET=" not in path.read_text()
+    else:
+        assert all("AUTH_MAIL_SECRET=" + key in path.read_text() for key in started_keys)
+
+
+def test_bad_effective_key_fails_before_build(tmp_path, monkeypatch):
+    ctx = Operations(
+        SimpleNamespace(
+            root=tmp_path, env_file=tmp_path / "env", project="bad-key", production=False
+        )
+    )
+    monkeypatch.setattr(
+        ctx,
+        "config",
+        lambda: {
+            "services": {
+                "app": {
+                    "environment": {
+                        "MAIL_BACKEND": "auto",
+                        "AUTH_MAIL_SECRET": "too-short",
+                    }
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(ctx, "compose", lambda *a, **kw: pytest.fail("No service mutation"))
+    with pytest.raises(OpsError, match="effective Compose configuration"):
+        ctx.start()
+
+
+def test_launcher_does_not_report_success_without_running_mail_configuration(tmp_path, monkeypatch):
+    ctx = Operations(
+        SimpleNamespace(
+            root=tmp_path, env_file=tmp_path / "env", project="runtime-key", production=False
+        )
+    )
+    monkeypatch.setattr(
+        ctx,
+        "config",
+        lambda: {
+            "services": {
+                "app": {
+                    "environment": {
+                        "MAIL_BACKEND": "auto",
+                        "AUTH_MAIL_SECRET": "m" * 48,
+                    }
+                }
+            }
+        },
+    )
+    calls = []
+    monkeypatch.setattr(ctx, "compose", lambda *args, **kw: calls.append(args))
+    monkeypatch.setattr(ctx, "quiesce", lambda **kw: contextlib.nullcontext())
+    monkeypatch.setattr(ctx, "check", lambda: {"status": "ok", "mail_delivery": "not_configured"})
+    with pytest.raises(OpsError, match="running app"):
+        ctx.start(build=False)
+    assert not any(args[0] == "up" and args[-1] == "web" for args in calls)

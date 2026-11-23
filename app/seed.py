@@ -37,6 +37,7 @@ from app.security import csrf_token, hash_password, token_hash
 
 NAMESPACE = UUID("ec7dc389-fae8-4f03-939c-0b57a4a50fa2")
 PASSWORD = "DemoVideo2026!"
+API_TIMEOUT_SECONDS = 15
 ACCOUNTS = (
     ("creator", "creator@demo.example.com", "user", "Автор демо"),
     ("viewer", "viewer@demo.example.com", "user", "Зритель демо"),
@@ -168,7 +169,8 @@ def api(base, path, *, token=None, method="GET", body=None):
         headers.update({"Cookie": "video_session=" + token, "X-CSRF-Token": csrf_token(token)})
     try:
         with urlopen(
-            Request(base + path, data=body, headers=headers, method=method), timeout=15
+            Request(base + path, data=body, headers=headers, method=method),
+            timeout=API_TIMEOUT_SECONDS,
         ) as r:
             return json.load(r)
     except HTTPError as exc:
@@ -246,7 +248,15 @@ def populate(settings, base_url, timeout=90):
                             AuthSession(
                                 token_hash=token_hash(token),
                                 user_id=identifier("creator"),
-                                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+                                # Each video has its own processing deadline. Cover
+                                # the whole run, uploads and a final poll per video.
+                                expires_at=datetime.now(UTC)
+                                + timedelta(
+                                    seconds=max(
+                                        600,
+                                        len(VIDEOS) * (timeout + 2 * API_TIMEOUT_SECONDS) + 60,
+                                    )
+                                ),
                             )
                         )
                         db.commit()
